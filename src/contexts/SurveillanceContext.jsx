@@ -31,30 +31,110 @@ export function SurveillanceProvider({ children }) {
   // Load all datasets from Supabase / Services
   const refreshAll = useCallback(async () => {
     try {
-      const [cList, aList, eList, fpList] = await Promise.all([
+      const [cRes, aRes, eRes, fpRes] = await Promise.all([
         camerasService.getAll(),
         alertsService.getAll(),
         eventsService.getAll(),
         friendlyPersonsService.getAll(),
       ]);
 
-      setCameras(cList);
+      const cList = Array.isArray(cRes) ? cRes : (cRes?.data || []);
+      const aList = Array.isArray(aRes) ? aRes : (aRes?.data || []);
+      const eList = Array.isArray(eRes) ? eRes : (eRes?.data || []);
+      const fpList = Array.isArray(fpRes) ? fpRes : (fpRes?.data || []);
+
+      // Default mock detections seeded for realism if empty
+      const enrichedCameras = cList.map((cam, idx) => {
+        if (!cam.activeDetections || cam.activeDetections.length === 0) {
+          const sampleDetections = [];
+          if (idx === 0) {
+            sampleDetections.push(
+              {
+                camera_id: cam.cameraCode || 'BOP-001',
+                track_id: 'P-104',
+                object_type: 'person',
+                confidence: 0.96,
+                bbox: { x: 22, y: 32, w: 18, h: 44 },
+                identity: null,
+                friendly: false,
+                timestamp: new Date().toISOString()
+              },
+              {
+                camera_id: cam.cameraCode || 'BOP-001',
+                track_id: 'P-042',
+                person_id: fpList[0]?.personCode || 'BSF-1024',
+                object_type: 'person',
+                confidence: 0.97,
+                face_match: 0.97,
+                bbox: { x: 62, y: 30, w: 18, h: 46 },
+                identity: fpList[0]?.fullName || 'Arun Kumar',
+                friendly: true,
+                status: 'FRIENDLY',
+                timestamp: new Date().toISOString()
+              }
+            );
+          } else if (idx === 1) {
+            sampleDetections.push(
+              {
+                camera_id: cam.cameraCode || 'BOP-002',
+                track_id: 'V-021',
+                object_type: 'vehicle',
+                confidence: 0.91,
+                bbox: { x: 35, y: 45, w: 32, h: 32 },
+                identity: null,
+                friendly: false,
+                timestamp: new Date().toISOString()
+              }
+            );
+          } else if (idx === 2) {
+            sampleDetections.push(
+              {
+                camera_id: cam.cameraCode || 'BOP-003',
+                track_id: 'U-312',
+                object_type: 'unknown',
+                confidence: 0.89,
+                bbox: { x: 45, y: 28, w: 16, h: 42 },
+                identity: null,
+                friendly: false,
+                timestamp: new Date().toISOString()
+              }
+            );
+          } else if (idx === 3) {
+            sampleDetections.push(
+              {
+                camera_id: cam.cameraCode || 'BOP-004',
+                track_id: 'P-208',
+                object_type: 'person',
+                confidence: 0.94,
+                bbox: { x: 18, y: 38, w: 17, h: 43 },
+                identity: null,
+                friendly: false,
+                timestamp: new Date().toISOString()
+              }
+            );
+          }
+          return { ...cam, activeDetections: sampleDetections };
+        }
+        return cam;
+      });
+
+      setCameras(enrichedCameras);
       setAlerts(aList);
       setEvents(eList);
       setFriendlyPersons(fpList);
 
-      if (!selectedCamera && cList.length > 0) {
-        setSelectedCamera(cList[0]);
+      if (!selectedCamera && enrichedCameras.length > 0) {
+        setSelectedCamera(enrichedCameras[0]);
       }
 
       const activeAlerts = aList.filter(a => a.status === 'ACTIVE').length;
-      const onlineCameras = cList.filter(c => c.status === 'ONLINE').length;
+      const onlineCameras = enrichedCameras.filter(c => c.status === 'ONLINE').length;
 
       setUnreadAlertsCount(activeAlerts);
       setStats({
         activeCameras: onlineCameras,
-        totalCameras: cList.length,
-        peopleDetectedToday: Math.max(308, cList.reduce((acc, c) => acc + (c.detections24h || 0), 0) + 120),
+        totalCameras: enrichedCameras.length,
+        peopleDetectedToday: Math.max(308, enrichedCameras.reduce((acc, c) => acc + (c.detections24h || 0), 0) + 120),
         vehiclesDetectedToday: Math.max(89, Math.round(eList.filter(e => e.targetType === 'VEHICLE').length * 15 + 40)),
         activeAlerts: activeAlerts,
         friendlyPersonsRegistered: fpList.length,
@@ -90,7 +170,7 @@ export function SurveillanceProvider({ children }) {
     } catch {}
   }, [soundEnabled]);
 
-  // Simulated AI Detections Pulse
+  // Simulated AI Detections Pulse & Smooth Tracking
   useEffect(() => {
     if (!isSimulating) return;
 
@@ -100,16 +180,23 @@ export function SurveillanceProvider({ children }) {
           if (cam.status !== 'ONLINE' || !cam.activeDetections?.length) return cam;
           
           const updatedDetections = cam.activeDetections.map(det => {
-            const dx = (Math.random() - 0.5) * 3;
-            const dy = (Math.random() - 0.5) * 2;
-            const nextX = Math.max(5, Math.min(80, (det.bbox?.x || 40) + dx));
-            const nextY = Math.max(10, Math.min(75, (det.bbox?.y || 40) + dy));
+            const dx = (Math.random() - 0.5) * 2.5;
+            const dy = (Math.random() - 0.5) * 1.8;
+            const currentX = typeof det.bbox?.x === 'number' ? det.bbox.x : (Array.isArray(det.bbox) ? det.bbox[0] : 40);
+            const currentY = typeof det.bbox?.y === 'number' ? det.bbox.y : (Array.isArray(det.bbox) ? det.bbox[1] : 40);
+            const currentW = typeof det.bbox?.w === 'number' ? det.bbox.w : (Array.isArray(det.bbox) ? det.bbox[2] : 18);
+            const currentH = typeof det.bbox?.h === 'number' ? det.bbox.h : (Array.isArray(det.bbox) ? det.bbox[3] : 40);
+
+            const nextX = Math.max(5, Math.min(80, currentX + dx));
+            const nextY = Math.max(15, Math.min(65, currentY + dy));
+
             return {
               ...det,
               bbox: {
-                ...det.bbox,
                 x: Number(nextX.toFixed(1)),
-                y: Number(nextY.toFixed(1))
+                y: Number(nextY.toFixed(1)),
+                w: currentW,
+                h: currentH
               }
             };
           });
@@ -117,7 +204,7 @@ export function SurveillanceProvider({ children }) {
           return { ...cam, activeDetections: updatedDetections };
         });
       });
-    }, 1800);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [isSimulating]);
@@ -135,12 +222,12 @@ export function SurveillanceProvider({ children }) {
       ? types.find(t => t.type.toLowerCase().includes(customType.toLowerCase())) || types[0]
       : types[Math.floor(Math.random() * types.length)];
 
-    const randomCam = cameras.find(c => c.status === 'ONLINE') || cameras[0] || { id: 'CAM-BOP-01', name: 'BOP-01 Forward Post' };
+    const randomCam = cameras.find(c => c.status === 'ONLINE') || cameras[0] || { id: 'CAM-BOP-01', cameraCode: 'BOP-001', name: 'BOP-01 Forward Post' };
 
     const newAlert = await alertsService.create({
       type: pick.type,
       camera: randomCam.name,
-      cameraId: randomCam.id,
+      cameraId: randomCam.id || randomCam.cameraCode,
       location: pick.loc,
       severity: pick.severity,
       confidence: `${(89 + Math.random() * 10).toFixed(1)}%`,
