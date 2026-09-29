@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { camerasService } from '../services/camerasService';
 import { alertsService } from '../services/alertsService';
 import { eventsService } from '../services/eventsService';
