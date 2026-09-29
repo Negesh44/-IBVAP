@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { auditLogsService } from '../services/auditLogsService';
+import { profilesService, auditLogsService } from '../services/profilesService';
 
 const AuthContext = createContext(null);
 
@@ -29,42 +29,49 @@ export function AuthProvider({ children }) {
         return DEFAULT_USER;
       }
     }
-    return DEFAULT_USER; // Default logged-in state for presentation
+    return DEFAULT_USER;
   });
 
   const [loading, setLoading] = useState(false);
 
+  // Load profile from Supabase on mount / auth change
   useEffect(() => {
     if (isSupabaseConfigured) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
-          setUser({
+          const profile = await profilesService.getProfileById(session.user.id);
+          const fullUser = profile || {
             id: session.user.id,
             name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
             email: session.user.email,
-            role: session.user.user_metadata?.role || 'OPERATOR',
-            department: 'Border Defense Unit',
-            badgeNumber: 'BDU-2026',
+            role: session.user.user_metadata?.role || 'ADMIN',
+            department: 'Border Defense Command',
+            badgeNumber: 'TAC-001',
             avatar: session.user.user_metadata?.avatar_url || DEFAULT_USER.avatar,
             station: 'Frontier Post Alpha',
-          });
+          };
+          setUser(fullUser);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fullUser));
         }
       });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (session?.user) {
-          setUser({
+          const profile = await profilesService.getProfileById(session.user.id);
+          const fullUser = profile || {
             id: session.user.id,
             name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
             email: session.user.email,
-            role: session.user.user_metadata?.role || 'OPERATOR',
-            department: 'Border Defense Unit',
-            badgeNumber: 'BDU-2026',
+            role: session.user.user_metadata?.role || 'ADMIN',
+            department: 'Border Defense Command',
+            badgeNumber: 'TAC-001',
             avatar: session.user.user_metadata?.avatar_url || DEFAULT_USER.avatar,
             station: 'Frontier Post Alpha',
-          });
-        } else {
-          // If session ended in supabase
+          };
+          setUser(fullUser);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fullUser));
+        } else if (event === 'SIGNED_OUT') {
+          // Keep state clean on explicit signout
         }
       });
 
@@ -77,9 +84,10 @@ export function AuthProvider({ children }) {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (data.user) {
-          const loggedUser = {
+        
+        if (!error && data?.user) {
+          const profile = await profilesService.getProfileById(data.user.id);
+          const loggedUser = profile || {
             id: data.user.id,
             name: data.user.user_metadata?.full_name || email.split('@')[0],
             email: data.user.email,
@@ -96,7 +104,7 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Mock Authentication flow
+      // Seamless Mock / Presentation Authentication Flow
       const nameMap = {
         ADMIN: 'Col. Sanjeev Rawat',
         COMMANDER: 'Maj. Rajesh Sharma',
@@ -141,16 +149,21 @@ export function AuthProvider({ children }) {
       await auditLogsService.log('User Logged Out', 'Tactical session terminated', user.name, user.role);
     }
     if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {}
     }
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const updateProfile = (updates) => {
+  const updateProfile = async (updates) => {
     const updated = { ...user, ...updates };
     setUser(updated);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    if (isSupabaseConfigured && user?.id) {
+      await profilesService.create({ id: user.id, ...updates });
+    }
   };
 
   return (

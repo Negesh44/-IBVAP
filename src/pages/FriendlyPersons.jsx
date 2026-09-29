@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   UserCheck, 
@@ -16,7 +16,9 @@ import {
   Mail, 
   Award,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import StatusBadge from '../components/common/StatusBadge';
@@ -30,6 +32,9 @@ export default function FriendlyPersons() {
   const [activeModal, setActiveModal] = useState(null); // 'add' | 'edit' | 'view'
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const fileInputRef = useRef(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -62,6 +67,8 @@ export default function FriendlyPersons() {
   }, []);
 
   const handleOpenAdd = () => {
+    setSelectedPhotoFile(null);
+    setPhotoPreview('');
     setFormData({
       fullName: '',
       personId: `BSF-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -80,6 +87,8 @@ export default function FriendlyPersons() {
   const handleOpenEdit = (person, e) => {
     e?.stopPropagation();
     setSelectedPerson(person);
+    setSelectedPhotoFile(null);
+    setPhotoPreview(person.avatar);
     setFormData({ ...person });
     setActiveModal('edit');
   };
@@ -87,6 +96,14 @@ export default function FriendlyPersons() {
   const handleOpenView = (person) => {
     setSelectedPerson(person);
     setActiveModal('view');
+  };
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
   };
 
   const handleDelete = async (id, name, e) => {
@@ -101,10 +118,10 @@ export default function FriendlyPersons() {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (activeModal === 'add') {
-      await friendlyPersonsService.create(formData);
+      await friendlyPersonsService.create(formData, selectedPhotoFile);
       await auditLogsService.log('Friendly Person Added', `Enrolled ${formData.fullName} (${formData.personId}) into Face Recognition DB`, 'Commander', 'ADMIN');
     } else if (activeModal === 'edit' && selectedPerson) {
-      await friendlyPersonsService.update(selectedPerson.id, formData);
+      await friendlyPersonsService.update(selectedPerson.id, formData, selectedPhotoFile);
       await auditLogsService.log('Friendly Person Updated', `Updated records for ${formData.fullName}`, 'Commander', 'ADMIN');
     }
     setActiveModal(null);
@@ -276,7 +293,7 @@ export default function FriendlyPersons() {
           isOpen={true}
           onClose={() => setActiveModal(null)}
           title={activeModal === 'add' ? 'Enroll New Friendly Person' : `Edit Identity — ${formData.fullName}`}
-          subtitle="Biometric Identity Enrollment for Automated Facial Recognition Pipeline"
+          subtitle="Biometric Identity Enrollment (Photo Uploaded to Supabase 'friendly-persons' Storage)"
           maxWidth="max-w-xl"
         >
           <form onSubmit={handleFormSubmit} className="space-y-4">
@@ -297,7 +314,7 @@ export default function FriendlyPersons() {
 
               <div>
                 <label className="text-xs font-mono text-slate-300 block mb-1">
-                  Service / Person ID *
+                  Person Code / ID *
                 </label>
                 <input
                   type="text"
@@ -342,6 +359,44 @@ export default function FriendlyPersons() {
               </div>
             </div>
 
+            {/* Photo Upload Section */}
+            <div>
+              <label className="text-xs font-mono text-slate-300 block mb-1">
+                Biometric Photo Upload (Supabase Storage: friendly-persons)
+              </label>
+              
+              <div className="flex items-center gap-4 p-3 rounded-xl bg-command-950 border border-slate-700">
+                <div className="w-14 h-14 rounded-xl border border-slate-700 bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-slate-600" />
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1.5 transition-colors border border-slate-600"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{selectedPhotoFile ? selectedPhotoFile.name : 'Choose Photo File...'}</span>
+                  </button>
+                  <span className="text-[10px] text-slate-500 font-mono block mt-1">
+                    Uploads encrypted image into Supabase Storage bucket
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-mono text-slate-300 block mb-1">
@@ -373,23 +428,10 @@ export default function FriendlyPersons() {
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-mono text-slate-300 block mb-1">
-                Photo Reference URL
-              </label>
-              <input
-                type="url"
-                value={formData.avatar}
-                onChange={(e) => setFormData({ ...formData, avatar: e.target.value })}
-                placeholder="https://..."
-                className="w-full p-2.5 bg-command-950 border border-slate-700 rounded-xl text-xs font-mono text-slate-100 focus:outline-none focus:border-cyan-400"
-              />
-            </div>
-
             {/* Neural Embedding notice box */}
             <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs font-mono flex items-center gap-2">
               <Cpu className="w-4 h-4 shrink-0 text-cyan-400" />
-              <span>Face recognition embedding vector (512-dim) will be generated & synced to AI inference models.</span>
+              <span>Face recognition vector (512-dim ArcFace) will be calculated and synced to table: `friendly_persons`.</span>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

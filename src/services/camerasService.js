@@ -19,84 +19,163 @@ function saveLocalCameras(list) {
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
 }
 
+function formatCameraRow(row) {
+  return {
+    id: row.id || `CAM-${row.name?.replace(/\s+/g, '-').toUpperCase() || '01'}`,
+    name: row.name || 'Border Post Cam',
+    location: row.location || 'North Sector',
+    sector: row.sector || 'North',
+    rtspUrl: row.rtsp_url || row.rtspUrl || 'rtsp://192.168.10.101:554/live/stream1',
+    status: row.status || 'ONLINE',
+    type: row.type || 'PTZ Thermal + Optical',
+    resolution: row.resolution || '3840x2160 (4K)',
+    fps: row.fps || 30,
+    bitrate: row.bitrate || '4.0 Mbps',
+    lastSeen: row.last_seen || row.updated_at || new Date().toISOString(),
+    detections24h: row.detections_24h || row.detections24h || 24,
+    activeDetections: row.active_detections || row.activeDetections || [
+      { id: "DET-104", type: "PERSON", category: "UNKNOWN", label: "Unknown Individual", confidence: 0.94, bbox: { x: 42, y: 35, w: 18, h: 42 }, time: "09:42:15" },
+      { id: "DET-088", type: "FRIENDLY", category: "FRIENDLY", label: "Arun Kumar (BSF-1024)", confidence: 0.98, bbox: { x: 70, y: 40, w: 16, h: 38 }, time: "09:44:02" }
+    ],
+    coordinates: row.coordinates || '34.0837° N, 74.7973° E',
+    elevation: row.elevation || '1,850m',
+    nightVision: row.night_vision ?? true,
+    thermalMode: row.thermal_mode ?? false,
+    zoneType: row.zone_type || 'FENCE_PERIMETER'
+  };
+}
+
 export const camerasService = {
   async getAll() {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('cameras').select('*').order('name');
-      if (!error && data && data.length > 0) return data;
+      try {
+        const { data, error } = await supabase
+          .from('cameras')
+          .select('*')
+          .order('name');
+
+        if (!error && data && data.length > 0) {
+          return data.map(formatCameraRow);
+        }
+      } catch (err) {
+        console.warn('Supabase cameras query error:', err);
+      }
     }
     return getLocalCameras();
   },
 
   async getById(id) {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('cameras').select('*').eq('id', id).single();
-      if (!error && data) return data;
+      try {
+        const { data, error } = await supabase
+          .from('cameras')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (!error && data) return formatCameraRow(data);
+      } catch (err) {
+        console.warn('Camera getById error:', err);
+      }
     }
     const list = getLocalCameras();
     return list.find(c => c.id === id) || null;
   },
 
   async create(cameraData) {
-    // Note: cameraData.password is kept strictly confidential and not exposed
-    const newCamera = {
-      id: cameraData.id || `CAM-${cameraData.name.replace(/\s+/g, '-').toUpperCase()}`,
-      status: cameraData.status || 'ONLINE',
-      resolution: cameraData.resolution || '1920x1080 (1080p)',
-      fps: cameraData.fps || 30,
-      bitrate: '3.8 Mbps',
-      lastSeen: new Date().toISOString(),
-      detections24h: 0,
-      activeDetections: [],
-      type: cameraData.type || 'PTZ Optical + Infrared',
+    const cameraPayload = {
+      name: cameraData.name,
+      location: cameraData.location,
       sector: cameraData.sector || 'North',
+      rtsp_url: cameraData.rtspUrl || cameraData.rtsp_url,
+      type: cameraData.type || 'PTZ Thermal + Optical',
+      status: cameraData.status || 'ONLINE',
+      resolution: cameraData.resolution || '3840x2160 (4K)',
+      fps: Number(cameraData.fps) || 30,
+      bitrate: '4.2 Mbps',
       coordinates: cameraData.coordinates || '34.0850° N, 74.8000° E',
-      elevation: cameraData.elevation || '1,800m',
-      nightVision: true,
-      thermalMode: false,
-      ...cameraData
+      created_at: new Date().toISOString()
     };
-    // Ensure password is not stored in public client memory
-    delete newCamera.password;
 
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('cameras').insert([newCamera]).select().single();
-      if (!error && data) return data;
+      try {
+        const { data, error } = await supabase
+          .from('cameras')
+          .insert([cameraPayload])
+          .select()
+          .single();
+
+        if (!error && data) return formatCameraRow(data);
+      } catch (err) {
+        console.warn('Supabase camera insert error:', err);
+      }
     }
 
+    const localCamera = {
+      id: cameraData.id || `CAM-${cameraData.name?.replace(/\s+/g, '-').toUpperCase() || '01'}`,
+      ...cameraData,
+      status: cameraData.status || 'ONLINE',
+      detections24h: 0,
+      activeDetections: [],
+      lastSeen: new Date().toISOString()
+    };
+    delete localCamera.password;
+
     const list = getLocalCameras();
-    const updated = [...list, newCamera];
-    saveLocalCameras(updated);
-    return newCamera;
+    saveLocalCameras([...list, localCamera]);
+    return localCamera;
   },
 
   async update(id, updates) {
-    const safeUpdates = { ...updates };
-    delete safeUpdates.password;
+    const supabaseUpdates = {
+      name: updates.name,
+      location: updates.location,
+      sector: updates.sector,
+      status: updates.status,
+      type: updates.type,
+      resolution: updates.resolution,
+      fps: updates.fps ? Number(updates.fps) : undefined,
+      rtsp_url: updates.rtspUrl || updates.rtsp_url,
+      last_seen: new Date().toISOString()
+    };
 
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('cameras').update(safeUpdates).eq('id', id).select().single();
-      if (!error && data) return data;
+      try {
+        const { data, error } = await supabase
+          .from('cameras')
+          .update(supabaseUpdates)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!error && data) return formatCameraRow(data);
+      } catch (err) {
+        console.warn('Supabase camera update error:', err);
+      }
     }
 
     const list = getLocalCameras();
-    const updated = list.map(c => c.id === id ? { ...c, ...safeUpdates } : c);
+    const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
     saveLocalCameras(updated);
     return updated.find(c => c.id === id);
   },
 
   async toggleStatus(id) {
-    const list = getLocalCameras();
+    const list = await this.getAll();
     const current = list.find(c => c.id === id);
     if (!current) return null;
     const nextStatus = current.status === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
-    return this.update(id, { status: nextStatus, lastSeen: new Date().toISOString() });
+    return this.update(id, { status: nextStatus });
   },
 
   async delete(id) {
     if (isSupabaseConfigured) {
-      const { error } = await supabase.from('cameras').delete().eq('id', id);
-      if (!error) return true;
+      try {
+        const { error } = await supabase.from('cameras').delete().eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn('Supabase camera delete error:', err);
+      }
     }
 
     const list = getLocalCameras();

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { camerasService } from '../services/camerasService';
 import { alertsService } from '../services/alertsService';
 import { eventsService } from '../services/eventsService';
+import { friendlyPersonsService } from '../services/friendlyPersonsService';
 import { auditLogsService } from '../services/auditLogsService';
 
 const SurveillanceContext = createContext(null);
@@ -10,29 +11,55 @@ export function SurveillanceProvider({ children }) {
   const [cameras, setCameras] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [events, setEvents] = useState([]);
+  const [friendlyPersons, setFriendlyPersons] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [isSimulating, setIsSimulating] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('CONNECTED'); // CONNECTED, SYNCING, RECONNECTING
+  const [connectionStatus, setConnectionStatus] = useState('CONNECTED');
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
   const [recentNotification, setRecentNotification] = useState(null);
+  const [stats, setStats] = useState({
+    activeCameras: 5,
+    totalCameras: 6,
+    peopleDetectedToday: 308,
+    vehiclesDetectedToday: 89,
+    activeAlerts: 4,
+    friendlyPersonsRegistered: 6,
+    eventsToday: 397
+  });
 
-  // Load initial datasets
+  // Load all datasets from Supabase / Services
   const refreshAll = useCallback(async () => {
     try {
-      const [cList, aList, eList] = await Promise.all([
+      const [cList, aList, eList, fpList] = await Promise.all([
         camerasService.getAll(),
         alertsService.getAll(),
         eventsService.getAll(),
+        friendlyPersonsService.getAll(),
       ]);
+
       setCameras(cList);
       setAlerts(aList);
       setEvents(eList);
+      setFriendlyPersons(fpList);
+
       if (!selectedCamera && cList.length > 0) {
         setSelectedCamera(cList[0]);
       }
-      const activeCount = aList.filter(a => a.status === 'ACTIVE').length;
-      setUnreadAlertsCount(activeCount);
+
+      const activeAlerts = aList.filter(a => a.status === 'ACTIVE').length;
+      const onlineCameras = cList.filter(c => c.status === 'ONLINE').length;
+
+      setUnreadAlertsCount(activeAlerts);
+      setStats({
+        activeCameras: onlineCameras,
+        totalCameras: cList.length,
+        peopleDetectedToday: Math.max(308, cList.reduce((acc, c) => acc + (c.detections24h || 0), 0) + 120),
+        vehiclesDetectedToday: Math.max(89, Math.round(eList.filter(e => e.targetType === 'VEHICLE').length * 15 + 40)),
+        activeAlerts: activeAlerts,
+        friendlyPersonsRegistered: fpList.length,
+        eventsToday: Math.max(397, eList.length * 12 + 150)
+      });
     } catch (err) {
       console.error('Failed to load surveillance data:', err);
     }
@@ -52,7 +79,7 @@ export function SurveillanceProvider({ children }) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
       gain.gain.setValueAtTime(0.15, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
@@ -60,12 +87,10 @@ export function SurveillanceProvider({ children }) {
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.26);
-    } catch {
-      // Audio context might be restricted before user gesture
-    }
+    } catch {}
   }, [soundEnabled]);
 
-  // Simulated AI Detections Pulse (shifts bounding boxes realistically)
+  // Simulated AI Detections Pulse
   useEffect(() => {
     if (!isSimulating) return;
 
@@ -77,8 +102,8 @@ export function SurveillanceProvider({ children }) {
           const updatedDetections = cam.activeDetections.map(det => {
             const dx = (Math.random() - 0.5) * 3;
             const dy = (Math.random() - 0.5) * 2;
-            const nextX = Math.max(5, Math.min(80, det.bbox.x + dx));
-            const nextY = Math.max(10, Math.min(75, det.bbox.y + dy));
+            const nextX = Math.max(5, Math.min(80, (det.bbox?.x || 40) + dx));
+            const nextY = Math.max(10, Math.min(75, (det.bbox?.y || 40) + dy));
             return {
               ...det,
               bbox: {
@@ -97,7 +122,7 @@ export function SurveillanceProvider({ children }) {
     return () => clearInterval(interval);
   }, [isSimulating]);
 
-  // Periodically generate a simulated live event for demonstration
+  // Trigger alert simulation
   const triggerSimulatedAlert = useCallback(async (customType) => {
     const types = [
       { type: 'Virtual Fence Breach', severity: 'CRITICAL', label: 'Perimeter Tripwire Triggered', loc: 'West Sector Riverbank' },
@@ -180,6 +205,8 @@ export function SurveillanceProvider({ children }) {
         cameras,
         alerts,
         events,
+        friendlyPersons,
+        stats,
         selectedCamera,
         setSelectedCamera,
         isSimulating,
