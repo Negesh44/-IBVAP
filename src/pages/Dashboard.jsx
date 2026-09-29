@@ -63,16 +63,20 @@ export default function Dashboard() {
   const [activeCameraModal, setActiveCameraModal] = useState(null);
 
   // Dynamic Camera Statistics from Supabase
-  const totalCameras = cameras.length || 6;
-  const onlineCameras = cameras.filter(c => c.status === 'ONLINE').length;
-  const warningCameras = cameras.filter(c => c.status === 'WARNING').length;
-  const offlineCameras = cameras.filter(c => c.status === 'OFFLINE').length;
+  const safeCameras = Array.isArray(cameras) ? cameras : [];
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const safeEvents = Array.isArray(events) ? events : [];
 
-  const activeAlertsCount = alerts.filter(a => a.status === 'ACTIVE').length;
-  const recentAlerts = alerts.slice(0, 4);
-  const recentEvents = events.slice(0, 5);
+  const totalCameras = safeCameras.length || 6;
+  const onlineCameras = safeCameras.filter(c => c?.status === 'ONLINE').length;
+  const warningCameras = safeCameras.filter(c => c?.status === 'WARNING').length;
+  const offlineCameras = safeCameras.filter(c => c?.status === 'OFFLINE').length;
 
-  const primaryCamera = selectedCamera || cameras[0] || null;
+  const activeAlertsCount = safeAlerts.filter(a => a?.status === 'ACTIVE').length;
+  const recentAlerts = safeAlerts.slice(0, 4);
+  const recentEvents = safeEvents.slice(0, 5);
+
+  const primaryCamera = selectedCamera || safeCameras[0] || null;
 
   return (
     <div className="space-y-6">

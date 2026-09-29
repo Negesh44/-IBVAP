@@ -28,7 +28,10 @@ export default function Events() {
   const [filterType, setFilterType] = useState('ALL');
   const [selectedEvent, setSelectedEvent] = useState(null);
 
-  const filteredEvents = events.filter(e => {
+  const safeEvents = Array.isArray(events) ? events : [];
+
+  const filteredEvents = safeEvents.filter(e => {
+    if (!e) return false;
     if (filterType !== 'ALL' && !e.eventType.toLowerCase().includes(filterType.toLowerCase())) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();

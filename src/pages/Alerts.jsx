@@ -28,8 +28,11 @@ export default function Alerts() {
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
   const [selectedAlert, setSelectedAlert] = useState(null);
 
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+
   // Filter alerts
-  const filteredAlerts = alerts.filter(a => {
+  const filteredAlerts = safeAlerts.filter(a => {
+    if (!a) return false;
     // Severity/Status filter
     if (filterSeverity === 'CRITICAL' && a.severity !== 'CRITICAL') return false;
     if (filterSeverity === 'WARNING' && a.severity !== 'WARNING') return false;

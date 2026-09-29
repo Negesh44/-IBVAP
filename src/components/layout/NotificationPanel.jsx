@@ -9,7 +9,8 @@ export default function NotificationPanel({ isOpen, onClose }) {
   const { alerts, acknowledgeAlert } = useSurveillance();
   const navigate = useNavigate();
 
-  const recentAlerts = alerts.slice(0, 6);
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const recentAlerts = safeAlerts.slice(0, 6);
 
   if (!isOpen) return null;
 
@@ -32,7 +33,7 @@ export default function NotificationPanel({ isOpen, onClose }) {
               </h4>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-              {alerts.filter(a => a.status === 'ACTIVE').length} Active
+              {safeAlerts.filter(a => a?.status === 'ACTIVE').length} Active
             </span>
           </div>
 

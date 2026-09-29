@@ -75,7 +75,8 @@ export default function Topbar({ onToggleMobileMenu }) {
   };
 
   const pageInfo = getPageTitle();
-  const onlineCount = cameras.filter(c => c.status === 'ONLINE').length;
+  const safeCameras = Array.isArray(cameras) ? cameras : [];
+  const onlineCount = safeCameras.filter(c => c?.status === 'ONLINE').length;
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-command-950/80 backdrop-blur-xl border-b border-slate-800/80 px-4 sm:px-6 flex items-center justify-between gap-4">
