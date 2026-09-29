@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { 
   Shield, 
   Lock, 
@@ -19,16 +18,23 @@ import { isSupabaseConfigured } from '../lib/supabase';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, signUp, loading } = useAuth();
+  const { login, signUp, loading, isAuthenticated } = useAuth();
 
   const [authMode, setAuthMode] = useState('signin'); // 'signin' | 'signup'
-  const [email, setEmail] = useState('commander.rawat@ibvap.gov.in');
+  const [email, setEmail] = useState('admin@ibvap.gov.in');
   const [password, setPassword] = useState('Security@2026');
   const [fullName, setFullName] = useState('Col. Sanjeev Rawat');
   const [role, setRole] = useState('ADMIN');
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -95,18 +101,13 @@ export default function Login() {
 
         <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-command-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>SUPABASE AUTH CONNECTED</span>
+          <span>{isSupabaseConfigured ? 'SUPABASE CONNECTED' : 'DEMO MODE READY'}</span>
         </div>
       </header>
 
       {/* Main Login Card */}
       <div className="flex-1 flex items-center justify-center p-4 relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 15, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="w-full max-w-md rounded-2xl bg-command-900/90 border border-slate-700/70 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl"
-        >
+        <div className="w-full max-w-md rounded-2xl bg-command-900/90 border border-slate-700/70 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl transition-all">
           {/* Brand Header */}
           <div className="text-center mb-5">
             <div className="inline-flex p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 mb-2 shadow-glow-cyan">
@@ -268,7 +269,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase transition-all shadow-glow-cyan flex items-center justify-center gap-2 disabled:opacity-50 mt-1"
+              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase transition-all shadow-glow-cyan flex items-center justify-center gap-2 disabled:opacity-50 mt-1 cursor-pointer"
             >
               {loading ? (
                 <>
@@ -289,7 +290,7 @@ export default function Login() {
             <span>Supabase: <span className="text-emerald-400">Live (6 Tables Ready)</span></span>
             <span className="text-cyan-400">SIH 2026 Edition</span>
           </div>
-        </motion.div>
+        </div>
       </div>
 
       {/* Footer */}
