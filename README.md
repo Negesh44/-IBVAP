@@ -52,133 +52,118 @@ IBVAP React Live Surveillance Dashboard (Vite / React 19)
 
 ---
 
-## 🐳 Docker Containerization & GPU Deployment
+## 🎯 IBVAP SIH Demo Mode (End-to-End Walkthrough)
 
-The IBVAP backend is containerized for production deployment with full NVIDIA Container Toolkit GPU support and automatic CPU fallback.
+Follow these steps for a complete SIH demonstration:
 
-### A. CPU Development (No GPU Required)
-Run natively or in Docker without dedicated graphics hardware:
+### 1. Install Dependencies
 ```powershell
-# Run locally with Python
+# Backend Dependencies
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-PyTorch automatically detects that CUDA is unavailable and falls back cleanly to optimized multi-threaded CPU tensor execution.
 
-### B. NVIDIA GPU Development
-If you have an NVIDIA GPU (e.g. RTX 3050/4090/A100), PyTorch will automatically allocate model weights and inference onto `cuda:0`:
-```powershell
-# Set environment
-$env:CUDA_VISIBLE_DEVICES="0"
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Frontend Dependencies
+cd ..
+npm install
 ```
 
-### C. Installing NVIDIA Container Toolkit (For Docker GPU)
-To enable GPU pass-through from the host into Docker:
-1. **Linux / WSL2**:
-   ```bash
-   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
-   ```
-2. **Windows**:
-   Install Docker Desktop with WSL2 backend enabled. NVIDIA drivers on the Windows host pass through CUDA automatically into Docker.
-
-### D. Building the Docker Image
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env` in both root and `backend/`:
 ```powershell
-# Build from project root
-docker compose build
+cp .env.example .env
+cp backend/.env.example backend/.env
+```
 
-# Or build from backend directory
+### 3. Place Demo Video (or Auto-Generate)
+You can place a sample video at `sample_feed.mp4` or configure `DEMO_VIDEO_PATH` in `backend/.env`. If omitted, the platform automatically generates an OpenCV synthetic tactical border feed on startup!
+
+### 4. Start the FastAPI Backend
+```powershell
 cd backend
-docker compose build
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+API Documentation available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### E. Starting the Containers
+### 5. Start the React Frontend Dashboard
 ```powershell
+npm run dev
+```
+Access the tactical command center at: [http://localhost:5173](http://localhost:5173)
+
+### 6. Start the Demonstration
+- Navigate to **Live Surveillance** on the frontend.
+- In the top **SIH DEMO MODE** toolbar, click **START DEMO** (Available to `ADMIN` and `COMMANDER`).
+- Alternatively, trigger via REST:
+  ```powershell
+  curl -X POST http://localhost:8000/api/demo/start -H "Authorization: Bearer <TOKEN>"
+  ```
+
+### 7. Open Live Surveillance
+Camera `DEMO-001` (**Border Surveillance Demo**) appears in the surveillance matrix with live status `ONLINE`.
+
+### 8. View Real-Time YOLO Detections
+The optical bounding overlay outlines moving targets (`person`, `car`, `truck`, `bus`, `motorcycle`) with dynamic confidence chips.
+
+### 9. View ByteTrack Target Tracking
+Targets maintain persistent track IDs (`P-101`, `P-102`) across frames with velocity vectors and occlusion resilience.
+
+### 10. View Spatial Event Engine Triggering
+When a tracked target enters the restricted virtual fence zone or loiters beyond the configured threshold, security events are computed.
+
+### 11. View Tactical Alerts & Sirens
+The top alert banner triggers critical audio sirens (Web Audio API) and creates triage items in the Alert Center.
+
+### 12. View Evidence Vault
+High-resolution evidence snapshots with bounding boxes and forensic metadata are uploaded to Supabase Storage and stored in the Evidence Vault.
+
+### 13. View Analytics & Fleet Telemetry
+Navigate to **Analytics** to view 7 Recharts panels with time windows (`1h`, `6h`, `24h`, `7d`, `30d`), fleet rankings, and GPU hardware telemetry.
+
+### 14. Stop Demo & Reset
+Click **STOP DEMO** or **RESET DEMO** on the Live Surveillance bar to halt ingestion and clear test counters without affecting production database records.
+
+---
+
+### 🛠️ Troubleshooting Guide
+
+- **GPU Acceleration Fallback**: If CUDA is not detected, PyTorch logs `CUDA not available. Using CPU for inference.` and executes multi-threaded CPU tensors without crashing.
+- **Video Codec Compatibility**: Ensure MP4 files use standard H.264 or MPEG-4 encoding. The platform automatically tries `mp4v` and `XVID` fallbacks.
+- **Supabase Offline Resilience**: If internet or database credentials are unavailable, the backend gracefully runs in `LOCAL_FALLBACK` mode using local caches.
+- **WebSocket Reconnection**: If the backend restarts, the frontend WebSocket service automatically enters exponential backoff retry until reconnecting.
+
+---
+
+## 🐳 Docker Containerization & GPU Deployment
+
+The IBVAP backend is containerized for production deployment with full NVIDIA Container Toolkit GPU support:
+
+### Building and Starting Containers
+```powershell
+# Build image
+docker compose build
+
 # Start detached
 docker compose up -d
 
 # View live container logs
 docker compose logs -f ibvap-backend
-```
 
-### F. Stopping the Containers
-```powershell
+# Stop containers
 docker compose down
-```
-
-### G. Mounting `best.pt` Model Weights
-Place your trained weights at `backend/models/best.pt`. The Docker Compose file automatically bind-mounts this directory:
-```yaml
-volumes:
-  - ./backend/models:/app/models
-```
-In the container, the weights resolve at `/app/models/best.pt`. You can swap or update weights on the host without rebuilding the container.
-
-### H. Setting Environment Variables
-Copy `.env.example` to `.env`:
-```powershell
-cp backend/.env.example backend/.env
-```
-Ensure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET` are configured.
-
-### I. Checking GPU Detection
-Verify GPU recognition inside the container via the diagnostic endpoint:
-```powershell
-curl http://localhost:8000/api/system/health -H "Authorization: Bearer <TOKEN>"
-```
-Response sample:
-```json
-{
-  "status": "healthy",
-  "gpu": {
-    "gpu_available": true,
-    "gpu_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
-    "gpu_memory_used_mb": 1420,
-    "gpu_memory_total_mb": 6144,
-    "gpu_utilization_percent": 18.5,
-    "gpu_temperature_c": 52
-  }
-}
-```
-
-### J. Checking FastAPI Health (Docker Healthcheck)
-```powershell
-curl http://localhost:8000/api/health
-```
-Returns `{"status": "healthy", "platform": "IBVAP", "version": "1.0.0", ...}`.
-
-### K. Running a Local MP4 Demo Feed
-Set in `backend/.env`:
-```env
-STREAM_SOURCE_MODE=video_file
-TEST_VIDEO_PATH=sample_feed.mp4
-```
-Start the stream via the React Live Surveillance Dashboard or API:
-```powershell
-curl -X POST http://localhost:8000/api/streams/start/BOP-001 -H "Authorization: Bearer <TOKEN>"
 ```
 
 ---
 
 ## 🛡️ Role-Based Access Control (RBAC) & Security
 
-IBVAP implements end-to-end defense-in-depth security across the React frontend, FastAPI gateway, and Supabase PostgreSQL database:
-
 | Feature / Permission | `ADMIN` | `COMMANDER` | `OPERATOR` | `VIEWER` |
 | :--- | :---: | :---: | :---: | :---: |
 | **Live Surveillance Feeds & Telemetry** | ✅ | ✅ | ✅ | ✅ (Masked HW info) |
 | **View Alerts & Security Events** | ✅ | ✅ | ✅ | ✅ |
 | **Acknowledge / Resolve Alerts** | ✅ | ✅ | ✅ | ❌ Read-Only |
-| **Start / Stop Camera Streams** | ✅ | ✅ | ✅ | ❌ Read-Only |
+| **Start / Stop Demo & Camera Streams** | ✅ | ✅ | ❌ | ❌ |
 | **Configure Virtual Fences & Cameras** | ✅ | ✅ | ❌ | ❌ |
 | **Enroll Friendly Biometric Persons** | ✅ | ✅ | ❌ Read-Only | ❌ Read-Only |
 | **Decommission Cameras / Delete Biometrics** | ✅ | ❌ | ❌ | ❌ |
@@ -187,74 +172,18 @@ IBVAP implements end-to-end defense-in-depth security across the React frontend,
 
 ---
 
-## ⚙️ Environment Variables
-
-### Frontend Configuration (`.env.example`)
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_APP_NAME="IBVAP — Intelligent Border Video Analytics Platform"
-VITE_APP_VERSION="1.0.0-SIH2026"
-
-# FastAPI Backend & WebSocket Gateway
-VITE_API_BASE_URL=http://localhost:8000
-VITE_WS_BASE_URL=ws://localhost:8000
-VITE_USE_MOCK_LIVE_DATA=false
-```
-
-### Backend Configuration (`backend/.env.example`)
-```env
-HOST=0.0.0.0
-PORT=8000
-ENVIRONMENT=production
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-
-# Supabase Service Integration
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-SUPABASE_JWT_SECRET=your-supabase-jwt-secret
-
-# AI Model File Paths & Detection Thresholds
-YOLO_MODEL_PATH=/app/models/best.pt
-YOLO_CONFIDENCE=0.40
-
-# License Plate Detection (ANPR) & OCR
-ANPR_MODEL_PATH=
-ANPR_CONFIDENCE=0.40
-OCR_CONFIDENCE=0.50
-
-# Biometric Facial Recognition
-FACE_MODEL_PATH=
-FACE_MATCH_THRESHOLD=0.45
-
-# Multi-Object Tracker (ByteTrack)
-TRACKER_TRACK_THRESH=0.40
-TRACKER_TRACK_BUFFER=30
-TRACKER_MATCH_THRESH=0.80
-
-# CCTV Ingestion & Real-Time Processing
-PROCESS_FPS=5
-STREAM_SOURCE_MODE=video_file
-```
-
----
-
 ## 🧪 Testing & Verification
 
-### Backend Test Suites (14 Tests Passed)
+### Run Complete Test Suite (24 Tests)
 ```powershell
 cd backend
 python -m unittest discover -s . -p "test_*.py"
 ```
-Or run dedicated security and telemetry suites:
+Or run individual test modules:
 ```powershell
-python test_security.py         # 9/9 Passed: JWT validation, 401/403 RBAC guards, sanitize, upload check
-python test_system_health.py    # 5/5 Passed: GPU fallback, zero-camera fleet, empty metrics handling
-python test_workflow.py         # Realtime evidence, storage upload, alert lifecycle & audit logs
-python test_streaming_pipeline.py # RTSP capture, camera worker thread & frame processor
-python test_event_engine.py     # Virtual fence, loitering & night movement rules
-python test_face_api.py         # FaceNet biometric matcher & friendly person verification
-python test_anpr_api.py         # PaddleOCR plate extraction & image normalization
+python test_integration_e2e.py    # 10/10 PASS: Complete 10-stage end-to-end pipeline verification
+python test_security.py           # 9/9 PASS: JWT validation, 401/403 RBAC guards, sanitize, upload check
+python test_system_health.py      # 5/5 PASS: GPU fallback, zero-camera fleet, empty metrics handling
 ```
 
 ### Frontend Build Verification
@@ -262,8 +191,3 @@ python test_anpr_api.py         # PaddleOCR plate extraction & image normalizati
 npm run build
 ```
 Compiled with zero TypeScript / JSX errors with optimized production bundle code splitting.
-
----
-
-> [!NOTE]
-> **Prototype & Demonstration Scope**: Hardware metrics, GPU telemetry, and AI detection thresholds are tailored for demonstration and evaluation in the SIH 2026 hackathon environment. Production deployments should enforce enterprise KMS secrets management, hardware key rings, and dedicated edge compute nodes (e.g., NVIDIA Jetson Orin / Clara).

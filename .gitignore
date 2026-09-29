@@ -30,6 +30,12 @@ __pycache__/
 .pytest_cache/
 *.pt
 
+# Media & Videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+
 # Environment variables
 .env
 .env.production

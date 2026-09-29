@@ -28,9 +28,11 @@ import SurveillanceFeed from '../components/surveillance/SurveillanceFeed';
 import CameraControlModal from '../components/surveillance/CameraControlModal';
 import LiveDetectionPanel from '../components/surveillance/LiveDetectionPanel';
 import SurveillanceMapView from '../components/surveillance/SurveillanceMapView';
+import DemoControlBanner from '../components/surveillance/DemoControlBanner';
 import Modal from '../components/common/Modal';
 import { useSurveillance } from '../contexts/SurveillanceContext';
 import { cn } from '../utils/cn';
+import { api } from '../services/api';
 
 export default function LiveSurveillance() {
   const { 
@@ -43,7 +45,30 @@ export default function LiveSurveillance() {
     socketStatus
   } = useSurveillance();
 
-  const safeCameras = Array.isArray(cameras) ? cameras : [];
+  const [isDemoRunning, setIsDemoRunning] = useState(false);
+
+  const baseCameras = Array.isArray(cameras) ? cameras : [];
+  
+  // Inject DEMO-001 if demo is active and not already present
+  const demoCamObj = {
+    id: 'DEMO-001',
+    cameraCode: 'DEMO-001',
+    name: 'Border Surveillance Demo',
+    location: 'Demo Border Post',
+    sector: 'DEMO SECTOR',
+    status: isDemoRunning ? 'ONLINE' : 'IDLE',
+    ipAddress: '192.168.1.100',
+    fps: 5,
+    resolution: '640x480',
+    rtsp_url: 'sample_feed.mp4',
+    streamUrl: api.getPreviewStreamUrl('DEMO-001')
+  };
+
+  const hasDemoCam = baseCameras.some(c => c?.id === 'DEMO-001' || c?.cameraCode === 'DEMO-001');
+  const safeCameras = (isDemoRunning && !hasDemoCam) 
+    ? [demoCamObj, ...baseCameras] 
+    : (hasDemoCam ? baseCameras.map(c => (c?.id === 'DEMO-001' || c?.cameraCode === 'DEMO-001') ? { ...c, status: isDemoRunning ? 'ONLINE' : c.status } : c) : baseCameras);
+
   const safeFriendlyPersons = Array.isArray(friendlyPersons) ? friendlyPersons : [];
 
   const [viewMode, setViewMode] = useState('GRID'); // 'GRID' | 'MAP'
@@ -158,6 +183,9 @@ export default function LiveSurveillance() {
           </div>
         </div>
       </div>
+
+      {/* SIH DEMONSTRATION MODE CONTROL BAR */}
+      <DemoControlBanner onDemoStatusChange={setIsDemoRunning} />
 
       {/* 8. TOP CONTROLS & MATRIX NAVIGATION TOOLBAR */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-command-900/90 border border-slate-800 backdrop-blur-xl">

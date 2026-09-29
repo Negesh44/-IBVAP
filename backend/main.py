@@ -31,6 +31,9 @@ from api.evidence import router as evidence_router
 from api.system import router as system_router
 from api.users import router as users_router
 from api.audit import router as audit_router
+from api.demo import router as demo_router
+from api.pipeline import router as pipeline_router
+from api.testing import router as testing_router
 
 # Logging Configuration
 logging.basicConfig(
@@ -137,6 +140,9 @@ app.include_router(evidence_router)
 app.include_router(system_router)
 app.include_router(users_router)
 app.include_router(audit_router)
+app.include_router(demo_router)
+app.include_router(pipeline_router)
+app.include_router(testing_router)
 
 
 # -------------------------------------------------------------

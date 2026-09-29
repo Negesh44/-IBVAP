@@ -248,5 +248,34 @@ export const api = {
   // MJPEG Preview URL helper
   getPreviewStreamUrl: (cameraId: string): string => {
     return `${API_BASE_URL}/api/streams/${cameraId}/preview`;
+  },
+
+  // SIH Live Demonstration Mode
+  startDemo: async (videoPath?: string): Promise<any> => {
+    return request('/api/demo/start', {
+      method: 'POST',
+      body: JSON.stringify({ video_path: videoPath })
+    });
+  },
+
+  stopDemo: async (): Promise<any> => {
+    return request('/api/demo/stop', { method: 'POST' });
+  },
+
+  getDemoStatus: async (): Promise<any> => {
+    return request('/api/demo/status');
+  },
+
+  getDemoMetrics: async (): Promise<any> => {
+    return request('/api/demo/metrics');
+  },
+
+  resetDemo: async (): Promise<any> => {
+    return request('/api/demo/reset', { method: 'POST' });
+  },
+
+  getPipelineStatus: async (): Promise<any> => {
+    return request('/api/pipeline/status');
   }
 };
+
