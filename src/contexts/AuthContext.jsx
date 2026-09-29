@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
 
   const [loading, setLoading] = useState(false);
 
-  // Load profile from Supabase on mount / auth change
+  // Restore profile from Supabase on mount
   useEffect(() => {
     if (isSupabaseConfigured) {
       supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -70,8 +70,6 @@ export function AuthProvider({ children }) {
           };
           setUser(fullUser);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fullUser));
-        } else if (event === 'SIGNED_OUT') {
-          // Keep state clean on explicit signout
         }
       });
 
@@ -86,7 +84,16 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         
         if (!error && data?.user) {
-          const profile = await profilesService.getProfileById(data.user.id);
+          let profile = await profilesService.getProfileById(data.user.id);
+          if (!profile) {
+            profile = await profilesService.create({
+              id: data.user.id,
+              name: data.user.user_metadata?.full_name || email.split('@')[0],
+              email: data.user.email,
+              role: data.user.user_metadata?.role || selectedRole,
+              department: 'Border Defense Command'
+            });
+          }
           const loggedUser = profile || {
             id: data.user.id,
             name: data.user.user_metadata?.full_name || email.split('@')[0],
@@ -104,7 +111,7 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Seamless Mock / Presentation Authentication Flow
+      // Mock Role Auth fallback for instant presentation
       const nameMap = {
         ADMIN: 'Col. Sanjeev Rawat',
         COMMANDER: 'Maj. Rajesh Sharma',
@@ -144,6 +151,63 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const signUp = async (email, password, fullName, selectedRole = 'OPERATOR') => {
+    setLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: selectedRole,
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data?.user) {
+          const profile = await profilesService.create({
+            id: data.user.id,
+            name: fullName,
+            email: email,
+            role: selectedRole,
+            department: 'Border Defense Unit'
+          });
+          if (data.session) {
+            setUser(profile);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(profile));
+            return { success: true, user: profile };
+          }
+          return { success: true, message: 'Account created! Please check your email or sign in.' };
+        }
+      }
+
+      // Local mock fallback
+      const mockUser = {
+        id: `USR-${Date.now().toString().slice(-4)}`,
+        name: fullName,
+        email: email,
+        role: selectedRole,
+        department: 'Border Defense Unit',
+        badgeNumber: 'TAC-001',
+        avatar: DEFAULT_USER.avatar,
+        station: 'Frontier Post',
+        twoFactorEnabled: false
+      };
+      setUser(mockUser);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockUser));
+      return { success: true, user: mockUser };
+    } catch (err) {
+      console.error('Sign up error:', err);
+      return { success: false, error: err.message || 'Registration failed' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     if (user) {
       await auditLogsService.log('User Logged Out', 'Tactical session terminated', user.name, user.role);
@@ -173,6 +237,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         loading,
         login,
+        signUp,
         logout,
         updateProfile
       }}

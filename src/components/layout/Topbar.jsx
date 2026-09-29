@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, 
   Bell, 
@@ -12,7 +12,9 @@ import {
   Cpu, 
   User, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSurveillance } from '../../contexts/SurveillanceContext';
@@ -21,7 +23,8 @@ import { cn } from '../../utils/cn';
 
 export default function Topbar({ onToggleMobileMenu }) {
   const location = useLocation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const { 
     soundEnabled, 
     setSoundEnabled, 
@@ -33,7 +36,13 @@ export default function Topbar({ onToggleMobileMenu }) {
   } = useSurveillance();
   
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   // Determine current page title
   const getPageTitle = () => {
@@ -147,23 +156,67 @@ export default function Topbar({ onToggleMobileMenu }) {
           />
         </div>
 
-        {/* Current User Badge */}
-        <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-          <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-700 bg-command-900">
-            <img
-              src={user?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-              alt="User"
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div className="hidden xl:block text-left">
-            <p className="text-xs font-semibold text-slate-200 leading-tight">
-              {user?.name || 'Commander'}
-            </p>
-            <p className="text-[9px] font-mono text-cyan-400 leading-tight">
-              {user?.role || 'ADMIN'} • {user?.department?.split(' ')[0] || 'BSF'}
-            </p>
-          </div>
+        {/* Current User Badge & Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserDropdown(prev => !prev)}
+            className="flex items-center gap-2 pl-2 border-l border-slate-800 hover:opacity-90 transition-opacity"
+          >
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-700 bg-command-900">
+              <img
+                src={user?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
+                alt="User"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="hidden xl:block text-left">
+              <p className="text-xs font-semibold text-slate-200 leading-tight flex items-center gap-1">
+                <span>{user?.name || 'Commander'}</span>
+                <ChevronDown className="w-3 h-3 text-slate-500" />
+              </p>
+              <p className="text-[9px] font-mono text-cyan-400 leading-tight">
+                {user?.role || 'ADMIN'} • {user?.department?.split(' ')[0] || 'BSF'}
+              </p>
+            </div>
+          </button>
+
+          {/* User Profile Popup Menu */}
+          {showUserDropdown && (
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowUserDropdown(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-4 top-16 w-56 rounded-xl bg-command-900/95 border border-slate-700 p-2 shadow-2xl backdrop-blur-xl z-50 text-xs font-mono"
+              >
+                <div className="px-3 py-2 border-b border-slate-800 mb-1">
+                  <p className="font-bold text-slate-200 truncate">{user?.name || 'Commander'}</p>
+                  <p className="text-[10px] text-cyan-400 truncate">{user?.email || 'admin@ibvap.gov.in'}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Role: {user?.role || 'ADMIN'}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    navigate('/settings');
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
+                >
+                  <User className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Officer Profile</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2 rounded-lg text-red-400 hover:bg-red-950/40 transition-colors flex items-center gap-2 mt-1 border-t border-slate-800/80"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Terminate Session</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

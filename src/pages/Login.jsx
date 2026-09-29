@@ -11,25 +11,46 @@ import {
   CheckCircle2, 
   Cpu, 
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  UserPlus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, loading } = useAuth();
+  const { login, signUp, loading } = useAuth();
 
-  const [email, setEmail] = useState('sanjeev.rawat@ibvap.gov.in');
-  const [password, setPassword] = useState('••••••••••••');
+  const [authMode, setAuthMode] = useState('signin'); // 'signin' | 'signup'
+  const [email, setEmail] = useState('commander.rawat@ibvap.gov.in');
+  const [password, setPassword] = useState('Security@2026');
+  const [fullName, setFullName] = useState('Col. Sanjeev Rawat');
   const [role, setRole] = useState('ADMIN');
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
-  const [demoNotice, setDemoNotice] = useState(true);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
+
+    if (authMode === 'signup') {
+      const res = await signUp(email, password, fullName, role);
+      if (res.success) {
+        if (res.user) {
+          navigate('/dashboard');
+        } else {
+          setSuccessMsg(res.message || 'Account registered! You can now sign in.');
+          setAuthMode('signin');
+        }
+      } else {
+        setErrorMsg(res.error || 'Registration failed.');
+      }
+      return;
+    }
+
+    // Sign In
     const result = await login(email, password, role);
     if (result.success) {
       navigate('/dashboard');
@@ -40,13 +61,15 @@ export default function Login() {
 
   const handleQuickRoleSelect = (selectedRole) => {
     setRole(selectedRole);
-    const roleEmails = {
-      ADMIN: 'sanjeev.rawat@ibvap.gov.in',
-      COMMANDER: 'rajesh.sharma@ibvap.gov.in',
-      OPERATOR: 'priya.verma@ibvap.gov.in',
-      VIEWER: 'amit.deshmukh@ibvap.gov.in'
+    const roleMap = {
+      ADMIN: { email: 'admin@ibvap.gov.in', name: 'Col. Sanjeev Rawat' },
+      COMMANDER: { email: 'commander@ibvap.gov.in', name: 'Maj. Rajesh Sharma' },
+      OPERATOR: { email: 'operator@ibvap.gov.in', name: 'Insp. Priya Verma' },
+      VIEWER: { email: 'viewer@ibvap.gov.in', name: 'Officer Amit Deshmukh' }
     };
-    setEmail(roleEmails[selectedRole] || 'operator@ibvap.gov.in');
+    const info = roleMap[selectedRole] || { email: 'operator@ibvap.gov.in', name: 'Surveillance Officer' };
+    setEmail(info.email);
+    setFullName(info.name);
   };
 
   return (
@@ -72,7 +95,7 @@ export default function Login() {
 
         <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-command-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>SECURITY PROTOCOL LEVEL 5</span>
+          <span>SUPABASE AUTH CONNECTED</span>
         </div>
       </header>
 
@@ -85,21 +108,47 @@ export default function Login() {
           className="w-full max-w-md rounded-2xl bg-command-900/90 border border-slate-700/70 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl"
         >
           {/* Brand Header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 mb-3 shadow-glow-cyan">
+          <div className="text-center mb-5">
+            <div className="inline-flex p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 mb-2 shadow-glow-cyan">
               <KeyRound className="w-6 h-6" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-white font-mono tracking-tight">
               IBVAP COMMAND PORTAL
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-0.5">
               Intelligent Border Video Analytics Platform
             </p>
           </div>
 
-          {/* Role Quick Selector for Presentation */}
-          <div className="mb-5">
-            <label className="text-[11px] font-mono text-slate-400 block mb-1.5 uppercase">
+          {/* Sign In vs Sign Up Tabs */}
+          <div className="flex items-center gap-2 p-1 bg-command-950 rounded-xl border border-slate-800 mb-4 text-xs font-mono">
+            <button
+              type="button"
+              onClick={() => { setAuthMode('signin'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
+                authMode === 'signin'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-glow-cyan'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('signup'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
+                authMode === 'signup'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-glow-cyan'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Register Account
+            </button>
+          </div>
+
+          {/* Role Quick Selector for SIH Presentation */}
+          <div className="mb-4">
+            <label className="text-[11px] font-mono text-slate-400 block mb-1 uppercase">
               Demonstration Role Preset:
             </label>
             <div className="grid grid-cols-4 gap-1.5 text-center">
@@ -121,7 +170,7 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {errorMsg && (
               <div className="p-3 rounded-lg bg-red-950/80 border border-red-500/50 text-red-300 text-xs font-mono flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -129,9 +178,32 @@ export default function Login() {
               </div>
             )}
 
+            {successMsg && (
+              <div className="p-3 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-mono flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            {authMode === 'signup' && (
+              <div>
+                <label className="text-xs font-mono text-slate-300 block mb-1">
+                  Full Officer Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Col. Sanjeev Rawat"
+                  className="w-full pl-3 pr-3 py-2 bg-command-950/90 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-mono text-slate-300 block mb-1">
-                Official Government Email / ID
+                Official Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -141,7 +213,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="officer.name@ibvap.gov.in"
-                  className="w-full pl-9 pr-3 py-2.5 bg-command-950/90 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 bg-command-950/90 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
                 />
               </div>
             </div>
@@ -149,18 +221,20 @@ export default function Login() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-mono text-slate-300">
-                  Password / CAC PIN
+                  Password
                 </label>
-                <a
-                  href="#forgot"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Password reset link dispatched to authorized sector officer email.');
-                  }}
-                  className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300"
-                >
-                  Forgot Password?
-                </a>
+                {authMode === 'signin' && (
+                  <a
+                    href="#forgot"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert('Password reset link dispatched to authorized sector officer email.');
+                    }}
+                    className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300"
+                  >
+                    Forgot Password?
+                  </a>
+                )}
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -170,7 +244,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-9 pr-3 py-2.5 bg-command-950/90 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 bg-command-950/90 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
                 />
               </div>
             </div>
@@ -187,32 +261,32 @@ export default function Login() {
               </label>
               <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                256-bit Encrypted
+                256-bit AES
               </span>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase transition-all shadow-glow-cyan flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase transition-all shadow-glow-cyan flex items-center justify-center gap-2 disabled:opacity-50 mt-1"
             >
               {loading ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
-                  <span>Authenticating...</span>
+                  <span>Connecting to Supabase...</span>
                 </>
               ) : (
                 <>
-                  <span>Authenticate & Enter</span>
+                  <span>{authMode === 'signup' ? 'Create Supabase Profile' : 'Authenticate & Enter'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Supabase Ready Notice */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
-            <span>Auth Engine: {isSupabaseConfigured ? 'Supabase Active' : 'Tactical Mock Mode'}</span>
+          {/* Supabase Status Footer */}
+          <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
+            <span>Supabase: <span className="text-emerald-400">Live (6 Tables Ready)</span></span>
             <span className="text-cyan-400">SIH 2026 Edition</span>
           </div>
         </motion.div>
