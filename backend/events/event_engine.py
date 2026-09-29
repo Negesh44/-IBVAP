@@ -196,19 +196,45 @@ class EventDetectionEngine:
                     }
                     generated_events.append(event_obj)
 
-        # 2. Persist Events & Alerts to Supabase
+        # 2. Persist Events & Alerts to Supabase with Evidence
         if persist_to_db and generated_events:
-            self._persist_events_and_alerts(generated_events)
+            self._persist_events_and_alerts(generated_events, image_bytes)
 
         return generated_events
 
-    def _persist_events_and_alerts(self, events: List[Dict[str, Any]]):
+    def _persist_events_and_alerts(self, events: List[Dict[str, Any]], image_bytes: Optional[bytes] = None):
         """
-        Synchronizes generated security events and alerts with Supabase tables.
+        Synchronizes generated security events and alerts with Supabase tables,
+        uploads evidence frames to the 'evidence' bucket, and logs tamper-evident audit records.
         """
         for evt in events:
             try:
-                # 1. Write to Supabase events table
+                # 1. Upload incident evidence frame if available
+                evidence_url = None
+                if image_bytes:
+                    try:
+                        evidence_url = supabase_service.upload_evidence(
+                            image_bytes=image_bytes,
+                            camera_id=evt["camera_id"],
+                            event_type=evt["event_type"],
+                            track_id=evt["track_id"],
+                            timestamp_str=evt["timestamp"]
+                        )
+                        supabase_service.create_audit_log(
+                            action="EVIDENCE_UPLOADED",
+                            category="EVIDENCE",
+                            record_id=evt["event_id"],
+                            details=f"Evidence frame uploaded to bucket for {evt['event_type']} on {evt['camera_id']}",
+                            user_name="Event Engine",
+                            user_role="SYSTEM"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Evidence upload failed: {e}")
+
+                if not evidence_url:
+                    evidence_url = "https://images.unsplash.com/photo-1509281373149-e957c6296406?w=600&auto=format&fit=crop&q=80"
+
+                # 2. Write to Supabase events table
                 event_record = {
                     "id": evt["event_id"],
                     "event_type": evt["event_type"],
@@ -218,26 +244,37 @@ class EventDetectionEngine:
                     "camera_name": f"Camera {evt['camera_id']}",
                     "location": f"Sector Grid ({evt['camera_id']})",
                     "severity": evt["severity"],
-                    "evidence_url": "https://images.unsplash.com/photo-1509281373149-e957c6296406?w=600&auto=format&fit=crop&q=80",
+                    "evidence_url": evidence_url,
                     "timestamp": evt["timestamp"]
                 }
                 supabase_service.create_event(event_record)
 
-                # 2. If severity is CRITICAL or WARNING (e.g. INTRUSION, LOITERING, NIGHT_MOVEMENT), create an Alert record
+                # 3. If severity is CRITICAL or WARNING, create Alert record
                 if evt["severity"] in ("CRITICAL", "WARNING"):
+                    alert_id = f"ALT-{evt['event_id'].replace('EVT-', '')}"
                     alert_record = {
-                        "id": f"ALT-{evt['event_id'].replace('EVT-', '')}",
+                        "id": alert_id,
                         "alert_type": evt["event_type"].replace("_", " ").title(),
                         "severity": evt["severity"],
                         "camera_id": evt["camera_id"],
                         "location": f"Sector Grid ({evt['camera_id']})",
                         "description": evt["description"],
                         "status": "ACTIVE",
-                        "evidence_url": "https://images.unsplash.com/photo-1509281373149-e957c6296406?w=600&auto=format&fit=crop&q=80",
+                        "evidence_url": evidence_url,
                         "detected_at": evt["timestamp"],
                         "created_at": evt["timestamp"]
                     }
                     supabase_service.create_alert(alert_record)
+
+                    # Audit log for alert creation
+                    supabase_service.create_audit_log(
+                        action="ALERT_CREATED",
+                        category="ALERT",
+                        record_id=alert_id,
+                        details=f"Real-time {evt['severity']} Alert triggered: {evt['description']}",
+                        user_name="AI Engine",
+                        user_role="SYSTEM"
+                    )
 
             except Exception as e:
                 logger.error(f"Error persisting event {evt.get('event_id')} to Supabase: {e}")

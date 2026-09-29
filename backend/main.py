@@ -27,6 +27,7 @@ from api.tracking import router as tracking_router
 from api.anpr import router as anpr_router
 from api.face import router as face_router
 from api.streams import router as streams_router
+from api.evidence import router as evidence_router
 
 # Logging Configuration
 logging.basicConfig(
@@ -110,6 +111,7 @@ app.include_router(tracking_router)
 app.include_router(anpr_router)
 app.include_router(face_router)
 app.include_router(streams_router)
+app.include_router(evidence_router)
 
 
 # -------------------------------------------------------------

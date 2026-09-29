@@ -22,8 +22,20 @@ async def list_alerts(
 async def update_alert(alert_id: str, payload: AlertActionRequest):
     """
     Acknowledge or resolve an active perimeter alarm.
+    Logs audit events in Supabase audit_logs table.
     """
     updated = supabase_service.update_alert_status(alert_id, payload.status, payload.note)
     if not updated:
         raise HTTPException(status_code=404, detail=f"Alert with ID '{alert_id}' not found.")
+
+    action_name = f"ALERT_{payload.status.upper()}"
+    supabase_service.create_audit_log(
+        action=action_name,
+        category="ALERT",
+        record_id=alert_id,
+        details=f"Alert status set to {payload.status.upper()}: {payload.note or 'No operator notes provided'}",
+        user_name=payload.operator_name or "Command Operator",
+        user_role="OPERATOR"
+    )
+
     return updated

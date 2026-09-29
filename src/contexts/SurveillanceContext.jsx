@@ -7,6 +7,7 @@ import { friendlyPersonsService } from '../services/friendlyPersonsService';
 import { auditLogsService } from '../services/auditLogsService';
 import { api, USE_MOCK_LIVE_DATA } from '../services/api';
 import { liveSocket } from '../services/liveSocket';
+import { realtimeService } from '../services/realtime';
 
 const SurveillanceContext = createContext(null);
 
@@ -456,21 +457,78 @@ export function SurveillanceProvider({ children }) {
     }
   }, [playAlertSound]);
 
-  const acknowledgeAlert = async (alertId, actionNote = 'Acknowledged by operator', user = 'Commander Rawat', userRole = 'ADMIN', userId = null) => {
+  const [realtimeStatus, setRealtimeStatus] = useState('DISCONNECTED'); // 'CONNECTED' | 'DISCONNECTED'
+
+  // Wire Realtime Service
+  useEffect(() => {
+    const unsub = realtimeService.subscribe({
+      onConnectionStateChange: (state) => {
+        setRealtimeStatus(state === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED');
+      },
+      onNewAlert: (newAlert) => {
+        setAlerts(prev => [newAlert, ...prev.filter(a => a.id !== newAlert.id)]);
+        setUnreadAlertsCount(prev => prev + 1);
+        setRecentNotification({
+          id: newAlert.id,
+          title: `${newAlert.severity === 'CRITICAL' ? 'CRITICAL ALERT' : 'SECURITY ALERT'}: ${newAlert.type}`,
+          message: `${newAlert.camera} — ${newAlert.location}`,
+          timestamp: new Date().toISOString(),
+          severity: newAlert.severity,
+          evidenceUrl: newAlert.evidenceUrl
+        });
+        playAlertSound();
+      },
+      onAlertUpdated: (updatedAlert) => {
+        setAlerts(prev => prev.map(a => a.id === updatedAlert.id ? updatedAlert : a));
+      },
+      onAlertDeleted: (deletedId) => {
+        setAlerts(prev => prev.filter(a => a.id !== deletedId));
+      },
+      onNewEvent: (newEvent) => {
+        setEvents(prev => [newEvent, ...prev.filter(e => e.id !== newEvent.id)]);
+      },
+      onEventUpdated: (updatedEvent) => {
+        setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
+      },
+      onCameraStatusChange: (updatedCam) => {
+        setCameras(prev => prev.map(c => (c.id === updatedCam.id || c.cameraCode === updatedCam.camera_code) ? { ...c, ...updatedCam } : c));
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [playAlertSound]);
+
+  const acknowledgeAlert = async (alertId, actionNote = 'Acknowledged by operator', user = 'Commander Rawat', userRole = 'OPERATOR', userId = null) => {
+    const roleUpper = (userRole || 'OPERATOR').toUpperCase();
+    if (roleUpper === 'VIEWER') {
+      alert('Access Denied: VIEWER role is read-only and cannot acknowledge alerts.');
+      return false;
+    }
+
     const updated = await alertsService.updateStatus(alertId, 'ACKNOWLEDGED', actionNote);
     if (updated) {
       setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
     }
-    await auditLogsService.log('Alert Acknowledged', 'ALERT', alertId, actionNote || 'Status set to ACKNOWLEDGED', user, userRole, userId);
+    await auditLogsService.log('ALERT_ACKNOWLEDGED', 'ALERT', alertId, actionNote || 'Status set to ACKNOWLEDGED', user, userRole, userId);
+    return true;
   };
 
-  const resolveAlert = async (alertId, resolutionNote = 'Threat verified & cleared', user = 'Commander Rawat', userRole = 'ADMIN', userId = null) => {
+  const resolveAlert = async (alertId, resolutionNote = 'Threat verified & cleared', user = 'Commander Rawat', userRole = 'OPERATOR', userId = null) => {
+    const roleUpper = (userRole || 'OPERATOR').toUpperCase();
+    if (roleUpper === 'VIEWER') {
+      alert('Access Denied: VIEWER role is read-only and cannot resolve alerts.');
+      return false;
+    }
+
     const updated = await alertsService.updateStatus(alertId, 'RESOLVED', resolutionNote);
     if (updated) {
       setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
       setUnreadAlertsCount(prev => Math.max(0, prev - 1));
     }
-    await auditLogsService.log('Alert Resolved', 'ALERT', alertId, resolutionNote || 'Status set to RESOLVED', user, userRole, userId);
+    await auditLogsService.log('ALERT_RESOLVED', 'ALERT', alertId, resolutionNote || 'Status set to RESOLVED', user, userRole, userId);
+    return true;
   };
 
   const clearNotification = () => setRecentNotification(null);
@@ -494,6 +552,7 @@ export function SurveillanceProvider({ children }) {
         backendStatus,
         socketStatus,
         socketDetails,
+        realtimeStatus,
         unreadAlertsCount,
         recentNotification,
         clearNotification,
