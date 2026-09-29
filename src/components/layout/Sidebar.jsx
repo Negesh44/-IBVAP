@@ -31,18 +31,76 @@ export default function Sidebar({ isOpen, onClose }) {
     navigate('/login');
   };
 
-  const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Live Surveillance', path: '/live', icon: Video, pulseBadge: true },
-    { name: 'Alerts', path: '/alerts', icon: ShieldAlert, badge: unreadAlertsCount > 0 ? unreadAlertsCount : null },
-    { name: 'Cameras', path: '/cameras', icon: Camera },
-    { name: 'Friendly Persons', path: '/friendly-persons', icon: UserCheck },
-    { name: 'Events', path: '/events', icon: CalendarDays },
-    { name: 'Analytics', path: '/analytics', icon: BarChart3 },
-    { name: 'Users', path: '/users', icon: Users, adminOnly: true },
-    { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText },
-    { name: 'Settings', path: '/settings', icon: Settings },
+  const userRole = (user?.role || 'OPERATOR').toUpperCase();
+
+  const allNavItems = [
+    { 
+      name: 'Dashboard', 
+      path: '/dashboard', 
+      icon: LayoutDashboard,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
+    },
+    { 
+      name: 'Live Surveillance', 
+      path: '/live', 
+      icon: Video, 
+      pulseBadge: true,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
+    },
+    { 
+      name: 'Alerts', 
+      path: '/alerts', 
+      icon: ShieldAlert, 
+      badge: unreadAlertsCount > 0 ? unreadAlertsCount : null,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+    },
+    { 
+      name: 'Cameras', 
+      path: '/cameras', 
+      icon: Camera,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+    },
+    { 
+      name: 'Friendly Persons', 
+      path: '/friendly-persons', 
+      icon: UserCheck,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+    },
+    { 
+      name: 'Events', 
+      path: '/events', 
+      icon: CalendarDays,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
+    },
+    { 
+      name: 'Analytics', 
+      path: '/analytics', 
+      icon: BarChart3,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'VIEWER'] // Operator cannot view analytics
+    },
+    { 
+      name: 'Users', 
+      path: '/users', 
+      icon: Users,
+      allowedRoles: ['ADMIN']
+    },
+    { 
+      name: 'Audit Logs', 
+      path: '/audit-logs', 
+      icon: ScrollText,
+      allowedRoles: ['ADMIN']
+    },
+    { 
+      name: 'Settings', 
+      path: '/settings', 
+      icon: Settings,
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
+    },
   ];
+
+  const visibleNavItems = allNavItems.filter((item) =>
+    item.allowedRoles.includes(userRole)
+  );
 
   return (
     <>
@@ -86,11 +144,14 @@ export default function Sidebar({ isOpen, onClose }) {
 
           {/* Navigation Links */}
           <div className="px-3 py-4 space-y-1 overflow-y-auto max-h-[calc(100vh-250px)]">
-            <div className="px-3 py-1 text-[10px] font-mono font-semibold uppercase text-slate-500 tracking-wider">
-              Surveillance Ops
+            <div className="px-3 py-1 text-[10px] font-mono font-semibold uppercase text-slate-500 tracking-wider flex items-center justify-between">
+              <span>Tactical Console</span>
+              <span className="text-[9px] text-cyan-400/80 bg-cyan-950/60 px-1.5 py-0.2 rounded border border-cyan-500/20">
+                {userRole}
+              </span>
             </div>
 
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -154,10 +215,10 @@ export default function Sidebar({ isOpen, onClose }) {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-200 truncate">
-                  {user?.name || 'Commander Rawat'}
+                  {user?.name || user?.fullName || 'Officer'}
                 </p>
                 <p className="text-[10px] font-mono text-cyan-400 truncate">
-                  {user?.role || 'ADMIN'}
+                  {userRole}
                 </p>
               </div>
             </div>
