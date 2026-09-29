@@ -38,7 +38,9 @@ export default function LiveSurveillance() {
     friendlyPersons,
     triggerSimulatedAlert,
     isSimulating,
-    setIsSimulating
+    setIsSimulating,
+    backendStatus,
+    socketStatus
   } = useSurveillance();
 
   const safeCameras = Array.isArray(cameras) ? cameras : [];
@@ -80,39 +82,55 @@ export default function LiveSurveillance() {
       {/* 10. AI STATUS BANNER */}
       <div className="rounded-2xl bg-command-900/90 border border-slate-800/90 backdrop-blur-xl p-3 sm:p-4 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-          {/* Status block 1: AI Engine Online */}
+          {/* Status block 1: Backend Connection Indicator */}
           <div className="flex items-center gap-2.5">
             <div className="relative flex items-center justify-center w-3 h-3">
-              <span className="absolute w-3 h-3 rounded-full bg-emerald-500/40 animate-ping" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              <span className={cn(
+                "absolute w-3 h-3 rounded-full animate-ping",
+                backendStatus === 'ONLINE' ? "bg-emerald-500/40" : "bg-amber-500/40"
+              )} />
+              <span className={cn(
+                "w-2.5 h-2.5 rounded-full shadow-md",
+                backendStatus === 'ONLINE' ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]"
+              )} />
             </div>
             <div>
-              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">AI ENGINE</span>
-              <span className="text-emerald-400 font-bold tracking-wide">ONLINE</span>
+              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">FASTAPI BACKEND</span>
+              <span className={cn(
+                "font-bold tracking-wide",
+                backendStatus === 'ONLINE' ? "text-emerald-400" : "text-amber-400"
+              )}>
+                {backendStatus === 'ONLINE' ? 'BACKEND ONLINE' : 'BACKEND OFFLINE'}
+              </span>
             </div>
           </div>
 
-          {/* Status block 2: Model */}
+          {/* Status block 2: Model & Tracker */}
           <div className="flex items-center gap-2 border-l border-slate-800 pl-3">
             <Cpu className="w-4 h-4 text-cyan-400" />
             <div>
-              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">MODEL</span>
-              <span className="text-cyan-300 font-bold">YOLOv8</span>
+              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">AI PIPELINE</span>
+              <span className="text-cyan-300 font-bold">YOLOv8 + ByteTrack</span>
             </div>
           </div>
 
-          {/* Status block 3: Tracker */}
+          {/* Status block 3: WebSocket Stream Status */}
           <div className="flex items-center gap-2 border-l border-slate-800 pl-3">
-            <Layers className="w-4 h-4 text-purple-400" />
+            <Radio className={cn("w-4 h-4", socketStatus === 'CONNECTED' ? "text-emerald-400" : "text-amber-400")} />
             <div>
-              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">TRACKER</span>
-              <span className="text-purple-300 font-bold">ByteTrack</span>
+              <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">STREAM SOCKET</span>
+              <span className={cn(
+                "font-bold",
+                socketStatus === 'CONNECTED' ? "text-emerald-400" : "text-amber-400"
+              )}>
+                {socketStatus}
+              </span>
             </div>
           </div>
 
           {/* Status block 4: Cameras Online */}
           <div className="flex items-center gap-2 border-l border-slate-800 pl-3">
-            <Radio className="w-4 h-4 text-emerald-400" />
+            <Layers className="w-4 h-4 text-emerald-400" />
             <div>
               <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">CAMERAS</span>
               <span className="text-emerald-400 font-bold">{onlineCamerasCount} ONLINE</span>
@@ -124,7 +142,7 @@ export default function LiveSurveillance() {
             <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
             <div>
               <span className="text-[10px] text-slate-500 block leading-tight uppercase font-bold">PROCESSING</span>
-              <span className="text-cyan-300 font-bold">ACTIVE (18.4ms)</span>
+              <span className="text-cyan-300 font-bold">ACTIVE</span>
             </div>
           </div>
 

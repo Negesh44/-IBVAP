@@ -183,14 +183,23 @@ export default function SurveillanceFeed({
             {/* Live Bounding Boxes Overlay with Strict Color Code & Friendly Badges */}
             {showBoundingBoxes && visibleDetections.map((det, idx) => {
               // Extract detection properties supporting both legacy & FastAPI formats
-              const objType = (det.object_type || det.type || 'person').toLowerCase();
-              const isFriendly = det.friendly || objType === 'friendly' || det.category === 'FRIENDLY';
-              const isVehicle = objType === 'vehicle' || det.category === 'VEHICLE';
-              const isAlert = objType.includes('event') || objType.includes('alert') || det.category === 'CRITICAL' || det.type === 'ALERT';
-              const isUnknown = !isFriendly && !isVehicle && !isAlert && (objType === 'unknown' || det.category === 'UNKNOWN' || det.unknown);
-              const isNormalPerson = !isFriendly && !isVehicle && !isAlert && !isUnknown;
+              const rawObjType = (det.object_type || det.type || 'person').toLowerCase();
+              const isFriendly = Boolean(det.friendly || rawObjType === 'friendly' || det.category === 'FRIENDLY');
+              const isAlert = rawObjType.includes('event') || rawObjType.includes('alert') || det.category === 'CRITICAL' || det.type === 'ALERT';
+              const isVehicle = ['car', 'truck', 'bus', 'motorcycle', 'vehicle'].includes(rawObjType) || det.category === 'VEHICLE';
+              const isUnknown = !isFriendly && !isAlert && !isVehicle && (rawObjType === 'unknown' || det.category === 'UNKNOWN' || det.unknown || !det.identity);
 
-              // Normalized coordinates
+              // Standardized Class Names: PERSON, CAR, TRUCK, BUS, MOTORCYCLE
+              let displayClassName = 'PERSON';
+              if (['car', 'truck', 'bus', 'motorcycle'].includes(rawObjType)) {
+                displayClassName = rawObjType.toUpperCase();
+              } else if (isVehicle) {
+                displayClassName = 'VEHICLE';
+              } else if (isAlert) {
+                displayClassName = 'SECURITY EVENT';
+              }
+
+              // Normalized coordinates (%)
               const bboxX = typeof det.bbox?.x === 'number' ? det.bbox.x : (Array.isArray(det.bbox) ? det.bbox[0] : 20 + idx * 25);
               const bboxY = typeof det.bbox?.y === 'number' ? det.bbox.y : (Array.isArray(det.bbox) ? det.bbox[1] : 30 + idx * 10);
               const bboxW = typeof det.bbox?.w === 'number' ? det.bbox.w : (Array.isArray(det.bbox) ? det.bbox[2] : (isVehicle ? 28 : 18));
@@ -201,45 +210,40 @@ export default function SurveillanceFeed({
                 : parseInt(det.confidence, 10) || 95;
 
               const trackId = det.track_id || det.trackId || det.id || `P-${100 + idx}`;
-              const personCode = det.person_id || det.personCode || 'BSF-1024';
-              const identityName = det.identity || det.name || det.label || 'Arun Kumar';
+              const personCode = det.person_id || det.personCode || '';
+              const identityName = det.identity || det.name || 'Authorized Personnel';
 
-              // Color styles per specification:
-              // Normal person: Blue (#00b0ff)
-              // Vehicle: Cyan (#00e5ff)
-              // Friendly person: Green (#00e676)
-              // Unknown person: Yellow (#ffb300) - Note: Unknown must NOT automatically be treated as a threat.
-              // Security event: Red (#ff334b)
+              // Visual styling
               let borderClass = 'border-blue-500';
               let bgClass = 'bg-blue-500/10 shadow-[0_0_12px_rgba(0,176,255,0.25)]';
               let tagBgClass = 'bg-blue-950/95 border-blue-500 text-blue-300';
-              let labelHeader = 'PERSON';
+              let labelHeader = `${displayClassName} ${confidenceNum}%`;
 
               if (isFriendly) {
                 borderClass = 'border-emerald-500';
                 bgClass = 'bg-emerald-500/10 shadow-[0_0_15px_rgba(0,230,118,0.3)]';
                 tagBgClass = 'bg-emerald-950/95 border-emerald-500 text-emerald-300';
-                labelHeader = 'FRIENDLY';
+                labelHeader = `${identityName} — FRIENDLY`;
               } else if (isVehicle) {
                 borderClass = 'border-cyan-400';
                 bgClass = 'bg-cyan-500/10 shadow-[0_0_12px_rgba(0,229,255,0.25)]';
                 tagBgClass = 'bg-cyan-950/95 border-cyan-400 text-cyan-300';
-                labelHeader = 'VEHICLE';
+                labelHeader = `${displayClassName} ${confidenceNum}%`;
               } else if (isUnknown) {
                 borderClass = 'border-amber-400';
                 bgClass = 'bg-amber-500/10 shadow-[0_0_12px_rgba(255,179,0,0.25)]';
                 tagBgClass = 'bg-amber-950/95 border-amber-400 text-amber-300';
-                labelHeader = 'UNKNOWN PERSON';
+                labelHeader = `UNKNOWN ${confidenceNum}%`;
               } else if (isAlert) {
                 borderClass = 'border-red-500';
                 bgClass = 'bg-red-500/20 shadow-[0_0_18px_rgba(255,51,75,0.4)] animate-pulse';
                 tagBgClass = 'bg-red-950/95 border-red-500 text-red-300';
-                labelHeader = 'SECURITY EVENT';
+                labelHeader = `SECURITY EVENT ${confidenceNum}%`;
               }
 
               return (
                 <div
-                  key={trackId + idx}
+                  key={String(trackId) + idx}
                   className={cn(
                     "absolute transition-all duration-700 ease-out border-2 pointer-events-none flex flex-col justify-between",
                     borderClass,
@@ -260,25 +264,23 @@ export default function SurveillanceFeed({
 
                   {/* Detection Card Badge */}
                   {isFriendly ? (
-                    /* 4. FRIENDLY PERSON STRUCTURED BOX */
-                    <div className="absolute -top-16 left-0 min-w-[130px] p-1.5 rounded bg-[#061e14]/95 border border-emerald-500 shadow-xl font-mono text-[10px] leading-tight text-emerald-300 pointer-events-none backdrop-blur-md">
+                    <div className="absolute -top-14 left-0 min-w-[140px] px-2 py-1 rounded bg-[#061e14]/95 border border-emerald-500 shadow-xl font-mono text-[10px] leading-tight text-emerald-300 pointer-events-none backdrop-blur-md">
                       <div className="font-bold flex items-center gap-1 text-emerald-400">
-                        <span>✓ FRIENDLY</span>
+                        <span>✓ {identityName} — FRIENDLY</span>
                       </div>
-                      <div className="text-white font-semibold text-[11px] truncate">{identityName}</div>
-                      <div className="text-emerald-300/90 text-[10px]">{personCode}</div>
-                      <div className="text-emerald-400 font-bold text-[10px] mt-0.5">Confidence: {confidenceNum}%</div>
+                      <div className="text-emerald-300/80 text-[9px] flex items-center justify-between mt-0.5">
+                        <span>{personCode || 'VERIFIED'}</span>
+                        <span className="font-bold text-emerald-400">{confidenceNum}%</span>
+                      </div>
                     </div>
                   ) : (
-                    /* STANDARD / VEHICLE / UNKNOWN / EVENT STRUCTURED TAG */
                     <div className={cn(
-                      "absolute -top-11 left-0 min-w-[100px] px-2 py-1 rounded text-[10px] font-mono leading-tight whitespace-nowrap border shadow-lg",
+                      "absolute -top-9 left-0 min-w-[100px] px-2 py-0.5 rounded text-[10px] font-mono leading-tight whitespace-nowrap border shadow-lg",
                       tagBgClass
                     )}>
                       <div className="font-bold tracking-wider">{labelHeader}</div>
-                      <div className="text-slate-200 text-[9px] flex items-center justify-between gap-2">
+                      <div className="text-slate-300 text-[8px] flex items-center justify-between">
                         <span>ID: {trackId}</span>
-                        <span className="font-bold">{confidenceNum}%</span>
                       </div>
                     </div>
                   )}

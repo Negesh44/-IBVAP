@@ -1,134 +1,151 @@
 # IBVAP — Intelligent Border Video Analytics Platform
 
-An AI-based Border Surveillance & Tactical Video Analytics Platform frontend dashboard designed for high-security command centers, border outposts (BOPs), and defense monitoring. Built for **Smart India Hackathon (SIH)**.
+An AI-based Border Surveillance & Tactical Video Analytics Platform designed for high-security command centers, border outposts (BOPs), and defense monitoring. Built for **Smart India Hackathon (SIH)**.
 
 ---
 
-## 🛰️ System Architecture
+## 🛰️ Full System Architecture
 
 ```
-CCTV RTSP Multi-Streams
-          ↓
-  Python FastAPI Backend (Future AI Engine)
-  ├── YOLOv8 (Human & Vehicle Spatial Detection)
-  ├── ByteTrack (Occlusion-Resilient Target Tracking)
-  ├── Face Recognition (512-dim ArcFace Embeddings)
-  ├── ANPR Engine (License Plate Optical Character Recognition)
-  └── Spatial Virtual Fence Event Engine
-          ↓
-  Supabase Database & Storage (Realtime WebSockets)
-          ↓
-  IBVAP React Frontend Dashboard (This Repository)
+IP CCTV Cameras (RTSP / ONVIF / MP4)
+       │
+       ▼
+Python FastAPI AI Backend (Port 8000)
+  ├── RTSP Stream Capture (OpenCV low-latency buffer & auto-reconnection)
+  ├── CameraWorker Threads (Isolated queue & 5 FPS rate limiter per camera)
+  ├── YOLOv8 (Human & Vehicle Spatial Detection: person, car, truck, bus, motorcycle)
+  ├── ByteTrack (Occlusion-Resilient Target Tracking with persistent track IDs)
+  ├── Biometric Face Recognition (InceptionResnetV1 512-D normalized embeddings)
+  ├── ANPR Engine (PaddleOCR License Plate Optical Character Recognition)
+  └── Spatial Virtual Fence Event Engine (Intrusion, Loitering, Night Movement, Stationary Behavior)
+       │
+       ├─► Supabase Database & Storage (Events, Alerts, Cameras, Friendly Persons)
+       ├─► MJPEG Preview (GET /api/streams/{camera_id}/preview for local dev)
+       └─► WebSocket Streaming Channel (/ws/live/{camera_id})
+               │
+               ▼
+IBVAP React Live Surveillance Dashboard (Vite / React 19)
 ```
 
 ---
 
 ## ⚡ Tech Stack
 
-- **Framework**: React 19 + Vite 6
-- **Language**: JavaScript (ESM)
-- **Styling**: Tailwind CSS (Custom Charcoal/Dark Command Center Theme)
-- **Routing**: React Router v7
-- **Database & Auth**: Supabase (`@supabase/supabase-js`)
-- **Icons**: Lucide React
-- **Analytics & Visualizations**: Recharts
-- **Animations**: Framer Motion
-- **Audio Engine**: Web Audio API (Synthesized tactical sirens)
-
----
-
-## 🖥️ Application Features & Layout
-
-### 1. **Tactical Operations Dashboard (`/dashboard`)**
-- Top KPI statistics: Active Cameras (5/6), People Detected (308), Vehicles (89), Active Alerts (4), Friendly Persons (6), Events Today (397).
-- Primary Focus CCTV stream with live bounding boxes and PTZ quick controls.
-- Real-time detection activity Recharts area graph (People vs. Vehicles vs. Alarms).
-- Live Security Alerts triage feed and Event Stream Timeline.
-
-### 2. **Live Surveillance Matrix (`/live`)**
-- Multi-channel CCTV matrix (1x1 single focus, 2x2 4-channel, 3x2 6-channel grids).
-- Sector filters (`ALL`, `NORTH`, `EAST`, `WEST`, `SOUTH`).
-- Simulated AI detection bounding boxes (`FRIENDLY` in green, `UNKNOWN` in amber, `BREACH/ALERT` in red, `VEHICLE` in cyan).
-- Interactive PTZ slew controls, Digital Zoom (+/-), Night Vision green phosphor & Thermal spectrum toggle modes.
-- Forensic snapshot capture and Fullscreen HD stream modal.
-
-### 3. **Security Alert Management Center (`/alerts`)**
-- Full incident triage: Virtual Fence Breach, Night Movement, Unknown Person, Loitering, Restricted Zone Entry.
-- Filter by Severity: All, Critical, Warning, Resolved.
-- Toggle between Card Grid view and Tactical Table view.
-- Detailed Alert Dossier modal with forensic evidence snapshot, confidence telemetry, and QRT response dispatch.
-
-### 4. **Friendly Persons & Biometric Identity Vault (`/friendly-persons`)**
-- Authorized personnel directory across BSF, Indian Army, ITBP, and SSB.
-- 512-dimensional facial recognition embedding checksum tracking and match confidence scores.
-- Interactive Add/Edit/Delete/View identity profile modals structured for future deep learning biometric pipeline.
-
-### 5. **Border Camera Fleet Management (`/cameras`)**
-- Optical & Thermal sensor hardware registry (Resolution, FPS, Bitrate, Status, Sector).
-- Add new camera node with RTSP URL, ONVIF ports, and password masking.
-- Live stream inspection modal and interactive PTZ calibration modal.
-
-### 6. **Border Event & Incident Log Archive (`/events`)**
-- Immutable chronological log with event severity classification, timestamps, and target identities.
-- Forensic evidence package inspection and archive export.
-
-### 7. **Border Intelligence & Analytics Matrix (`/analytics`)**
-- Hourly classification graphs (Personnel, Vehicles, Threat Events).
-- Personnel vs. Vehicle distribution Donut chart.
-- Threat frequency by alert category Bar chart.
-- Camera node activity and sensor uptime telemetry.
-- Date filters: **Today (24h)**, **Past 7 Days**, **Past 30 Days**.
-
-### 8. **Command Operators & User Directory (`/users`)**
-- Role-Based Access Control (RBAC): `ADMIN`, `COMMANDER`, `OPERATOR`, `VIEWER`.
-- Add command user modal and 2FA hardware key indicators.
-
-### 9. **System Security & Operational Audit Logs (`/audit-logs`)**
-- Tamper-proof audit journal tracking user logins, camera configurations, alert acknowledgments, and biometric mutations.
-- CSV export capability.
-
-### 10. **Platform & Defense Configuration (`/settings`)**
-- Edge compute hardware settings, Web Audio siren toggles, YOLOv8 confidence hyperparameters, and Supabase connection indicators.
-
-### 11. **Secure Login Portal (`/login`)**
-- Role preset switcher for rapid Smart India Hackathon demonstrations.
-- Seamless dual-mode authentication (Local Mock Auth & Live Supabase Auth).
+- **Frontend**: React 19 + Vite 6 + Tailwind CSS (Charcoal/Dark Command Center Theme)
+- **Backend API**: Python 3.12 + FastAPI + Uvicorn + WebSockets
+- **AI Vision**: YOLOv8 (Ultralytics) + ByteTrack + FaceNet (`facenet-pytorch`) + PaddleOCR
+- **Database & Storage**: Supabase (`@supabase/supabase-js` / Python `supabase`)
+- **Visualizations**: Recharts + Lucide React + Framer Motion
+- **Audio Engine**: Web Audio API (Synthesized tactical alert sirens)
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Installation
-```bash
+### 1. Backend Setup & Startup
+
+#### A. Navigate to backend:
+```powershell
+cd backend
+```
+
+#### B. Create & Activate Virtual Environment:
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+#### C. Install Dependencies:
+```powershell
+pip install -r requirements.txt
+```
+
+#### D. Start FastAPI Backend Server:
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+Backend Swagger Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+Health Check Endpoint: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+
+---
+
+### 2. Frontend Setup & Startup
+
+#### A. Navigate to root directory:
+```powershell
+cd ..
+```
+
+#### B. Install Frontend Dependencies:
+```powershell
 npm install
 ```
 
-### 2. Development Server
-```bash
+#### C. Configure Environment Variables (`.env`):
+```env
+VITE_SUPABASE_URL=https://tlpdoykzxpwzvhzypsqq.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_aezuXbrKhTWnvUMXo9L1oA_PIpWioCM
+VITE_APP_NAME="IBVAP — Intelligent Border Video Analytics Platform"
+VITE_APP_VERSION="1.0.0-SIH2026"
+
+# FastAPI Backend & WebSocket Configuration
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_BASE_URL=ws://localhost:8000
+VITE_USE_MOCK_LIVE_DATA=false
+```
+
+#### D. Start Frontend Development Server:
+```powershell
 npm run dev
 ```
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-### 3. Production Build
-```bash
+#### E. Production Build:
+```powershell
 npm run build
 npm run preview
 ```
 
 ---
 
-## 🗄️ Supabase Configuration (Optional)
+## 📹 CCTV Streaming & AI Pipeline Execution
 
-Create a `.env` file in the root directory:
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+### Local MP4 Video File (Development / Demo Mode)
+1. In `backend/.env`, set:
+   ```env
+   STREAM_SOURCE_MODE=video_file
+   TEST_VIDEO_PATH=sample_feed.mp4
+   ```
+2. Start stream worker for camera `BOP-001`:
+   ```bash
+   curl -X POST "http://localhost:8000/api/streams/start/BOP-001"
+   ```
+
+### Real RTSP IP CCTV Camera
+1. In `backend/.env`, set:
+   ```env
+   STREAM_SOURCE_MODE=rtsp
+   ```
+2. Start camera with RTSP URL:
+   ```bash
+   curl -X POST "http://localhost:8000/api/streams/start/BOP-001?rtsp_url=rtsp://admin:pass@192.168.1.100:554/live"
+   ```
+
+### Stop Camera Stream
+```bash
+curl -X POST "http://localhost:8000/api/streams/stop/BOP-001"
 ```
-*Note: If credentials are not provided, IBVAP automatically operates in high-fidelity mock mode with local state persistence.*
 
 ---
 
-## 🏆 Smart India Hackathon (SIH) Demo Features
-- **Simulate AI Alarm button**: Located in the sidebar and top ribbons to trigger instantaneous real-time critical breach simulations for jury demonstrations.
-- **Role switcher**: Test Admin, Commander, Operator, and Viewer permissions on the fly from the login screen.
-- **Synthesized Acoustic Siren**: Realistic alarm sounds using Web Audio API without external audio file latency.
+## 🧪 Running Automated Test Suites
+
+```powershell
+# In backend directory:
+python test_streaming_pipeline.py  # CCTV Ingestion & Real-Time Streaming
+python test_event_engine.py        # Event Engine (Virtual Fence, Loitering, Night Movement)
+python test_face_api.py            # Biometric Face Recognition
+python test_anpr_api.py            # Automatic Number Plate Recognition
+python test_detect_api.py          # YOLO Inference Endpoint
+python test_tracking_api.py        # ByteTrack Multi-Object Tracking Persistence
+```

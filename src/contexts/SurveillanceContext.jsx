@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { camerasService } from '../services/camerasService';
 import { alertsService } from '../services/alertsService';
 import { eventsService } from '../services/eventsService';
 import { friendlyPersonsService } from '../services/friendlyPersonsService';
 import { auditLogsService } from '../services/auditLogsService';
+import { api, USE_MOCK_LIVE_DATA } from '../services/api';
+import { liveSocket } from '../services/liveSocket';
 
 const SurveillanceContext = createContext(null);
 
@@ -14,9 +16,12 @@ export function SurveillanceProvider({ children }) {
   const [events, setEvents] = useState([]);
   const [friendlyPersons, setFriendlyPersons] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
-  const [isSimulating, setIsSimulating] = useState(true);
+  const [isSimulating, setIsSimulating] = useState(USE_MOCK_LIVE_DATA);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('CONNECTED');
+  const [backendStatus, setBackendStatus] = useState('CHECKING'); // 'ONLINE' | 'OFFLINE' | 'CHECKING'
+  const [socketStatus, setSocketStatus] = useState('DISCONNECTED');
+  const [socketDetails, setSocketDetails] = useState('');
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
   const [recentNotification, setRecentNotification] = useState(null);
   const [stats, setStats] = useState({
@@ -29,7 +34,27 @@ export function SurveillanceProvider({ children }) {
     eventsToday: 397
   });
 
-  // Load all datasets from Supabase / Services
+  // Check FastAPI backend health on load and periodically
+  const checkBackend = useCallback(async () => {
+    try {
+      const health = await api.checkBackendHealth();
+      if (health && health.status === 'healthy') {
+        setBackendStatus('ONLINE');
+      } else {
+        setBackendStatus('OFFLINE');
+      }
+    } catch {
+      setBackendStatus('OFFLINE');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkBackend();
+    const interval = setInterval(checkBackend, 15000);
+    return () => clearInterval(interval);
+  }, [checkBackend]);
+
+  // Load all datasets from Supabase & Backend Services
   const refreshAll = useCallback(async () => {
     try {
       const [cRes, aRes, eRes, fpRes] = await Promise.all([
@@ -44,7 +69,7 @@ export function SurveillanceProvider({ children }) {
       const eList = Array.isArray(eRes) ? eRes : (eRes?.data || []);
       const fpList = Array.isArray(fpRes) ? fpRes : (fpRes?.data || []);
 
-      // Default mock detections seeded for realism if empty
+      // Default seed detections if empty
       const enrichedCameras = cList.map((cam, idx) => {
         if (!cam.activeDetections || cam.activeDetections.length === 0) {
           const sampleDetections = [];
@@ -79,35 +104,9 @@ export function SurveillanceProvider({ children }) {
               {
                 camera_id: cam.cameraCode || 'BOP-002',
                 track_id: 'V-021',
-                object_type: 'vehicle',
+                object_type: 'car',
                 confidence: 0.91,
                 bbox: { x: 35, y: 45, w: 32, h: 32 },
-                identity: null,
-                friendly: false,
-                timestamp: new Date().toISOString()
-              }
-            );
-          } else if (idx === 2) {
-            sampleDetections.push(
-              {
-                camera_id: cam.cameraCode || 'BOP-003',
-                track_id: 'U-312',
-                object_type: 'unknown',
-                confidence: 0.89,
-                bbox: { x: 45, y: 28, w: 16, h: 42 },
-                identity: null,
-                friendly: false,
-                timestamp: new Date().toISOString()
-              }
-            );
-          } else if (idx === 3) {
-            sampleDetections.push(
-              {
-                camera_id: cam.cameraCode || 'BOP-004',
-                track_id: 'P-208',
-                object_type: 'person',
-                confidence: 0.94,
-                bbox: { x: 18, y: 38, w: 17, h: 43 },
                 identity: null,
                 friendly: false,
                 timestamp: new Date().toISOString()
@@ -171,9 +170,110 @@ export function SurveillanceProvider({ children }) {
     } catch {}
   }, [soundEnabled]);
 
-  // Simulated AI Detections Pulse & Smooth Tracking
+  // =========================================================================
+  // Real-Time FastAPI WebSocket Connection per Selected Camera
+  // =========================================================================
   useEffect(() => {
-    if (!isSimulating) return;
+    if (USE_MOCK_LIVE_DATA || !selectedCamera) return;
+
+    const camCode = selectedCamera.cameraCode || selectedCamera.id || 'BOP-001';
+
+    // Subscribe to LiveSocket events
+    const unsubscribe = liveSocket.subscribe({
+      onStateChange: (state, details) => {
+        setSocketStatus(state);
+        setSocketDetails(details || '');
+      },
+      onTelemetry: (payload) => {
+        if (!payload || !payload.camera_id) return;
+
+        setCameras(prevCameras => {
+          return prevCameras.map(cam => {
+            const currentCode = cam.cameraCode || cam.id;
+            if (currentCode !== payload.camera_id) return cam;
+
+            const normalizedDetections = (payload.detections || []).map((det, idx) => {
+              // Convert coordinate array [x1, y1, x2, y2] to percentage or box
+              let boxX = 20, boxY = 30, boxW = 20, boxH = 40;
+              if (Array.isArray(det.bbox) && det.bbox.length === 4) {
+                // If in pixels (e.g. 640x480 or 1920x1080), normalize to %
+                const [x1, y1, x2, y2] = det.bbox;
+                const frameW = x2 > 100 ? (x2 > 640 ? 1920 : 640) : 100;
+                const frameH = y2 > 100 ? (y2 > 480 ? 1080 : 480) : 100;
+                boxX = Math.max(0, Math.min(95, (x1 / frameW) * 100));
+                boxY = Math.max(0, Math.min(95, (y1 / frameH) * 100));
+                boxW = Math.max(5, Math.min(80, ((x2 - x1) / frameW) * 100));
+                boxH = Math.max(5, Math.min(80, ((y2 - y1) / frameH) * 100));
+              } else if (det.bbox && typeof det.bbox.x === 'number') {
+                boxX = det.bbox.x;
+                boxY = det.bbox.y;
+                boxW = det.bbox.w;
+                boxH = det.bbox.h;
+              }
+
+              return {
+                camera_id: payload.camera_id,
+                track_id: det.track_id ? `P-${det.track_id}` : `T-${100 + idx}`,
+                object_type: det.object_type || 'person',
+                confidence: typeof det.confidence === 'number' ? (det.confidence > 1 ? det.confidence / 100 : det.confidence) : 0.95,
+                bbox: { x: Number(boxX.toFixed(1)), y: Number(boxY.toFixed(1)), w: Number(boxW.toFixed(1)), h: Number(boxH.toFixed(1)) },
+                identity: det.friendly ? (det.identity || 'Authorized Personnel') : null,
+                friendly: Boolean(det.friendly),
+                timestamp: det.timestamp || payload.frame_timestamp
+              };
+            });
+
+            return { ...cam, activeDetections: normalizedDetections };
+          });
+        });
+
+        // If real-time events triggered from Event Engine
+        if (payload.events && payload.events.length > 0) {
+          payload.events.forEach(evt => {
+            const formattedEvent = {
+              id: evt.event_id,
+              eventType: evt.event_type.replace(/_/g, ' ').toUpperCase(),
+              camera: selectedCamera.name || `Camera ${evt.camera_id}`,
+              cameraId: evt.camera_id,
+              targetId: evt.track_id ? `TRK-${evt.track_id}` : 'TRACK-01',
+              targetType: 'PERSON',
+              severity: (evt.severity || 'WARNING').toUpperCase(),
+              location: selectedCamera.location || 'Perimeter Fence',
+              confidence: `${Math.round((evt.confidence || 0.95) * 100)}%`,
+              description: evt.description,
+              timestamp: evt.timestamp,
+              createdAt: evt.timestamp
+            };
+
+            setEvents(prev => [formattedEvent, ...prev.filter(e => e.id !== evt.event_id)]);
+
+            if (evt.severity === 'CRITICAL' || evt.severity === 'WARNING') {
+              playAlertSound();
+              setRecentNotification({
+                id: evt.event_id,
+                title: `${evt.severity}: ${evt.event_type}`,
+                message: evt.description,
+                timestamp: evt.timestamp,
+                severity: evt.severity
+              });
+            }
+          });
+        }
+      }
+    });
+
+    // Initiate connection
+    liveSocket.connect(camCode);
+
+    return () => {
+      unsubscribe();
+      liveSocket.disconnect();
+    };
+  }, [selectedCamera, playAlertSound]);
+
+  // Simulated AI Detections Pulse & Smooth Tracking fallback
+  useEffect(() => {
+    if (!isSimulating && !USE_MOCK_LIVE_DATA) return;
 
     const interval = setInterval(() => {
       setCameras(prevCameras => {
@@ -280,7 +380,6 @@ export function SurveillanceProvider({ children }) {
           { event: '*', schema: 'public', table: 'alerts' },
           (payload) => {
             if (payload.eventType === 'INSERT') {
-              const newAlert = alertsService.getById ? payload.new : payload.new;
               const formatted = {
                 id: payload.new.id,
                 type: payload.new.alert_type || payload.new.type || 'Security Alert',
@@ -392,6 +491,9 @@ export function SurveillanceProvider({ children }) {
         setSoundEnabled,
         connectionStatus,
         setConnectionStatus,
+        backendStatus,
+        socketStatus,
+        socketDetails,
         unreadAlertsCount,
         recentNotification,
         clearNotification,
