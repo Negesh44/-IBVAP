@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 800" width="100%" height="100%" style="background-color: #0b0f19; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <marker id="fk-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#06b6d4"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="550" y="40" fill="#f8fafc" font-size="18" font-weight="bold" text-anchor="middle" letter-spacing="1.2">IBVAP — DATABASE RELATIONAL SCHEMA (POSTGRESQL)</text>
+  <text x="550" y="62" fill="#94a3b8" font-size="11" text-anchor="middle">Supabase Row-Level Security &amp; Storage Architecture — Smart India Hackathon 2026</text>
+
+  <!-- ================= TABLE: CAMERAS ================= -->
+  <g transform="translate(50, 90)">
+    <rect width="280" height="240" rx="8" fill="#0f172a" stroke="#0284c7" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#0369a1"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.cameras</text>
+    <text x="15" y="55" fill="#38bdf8" font-size="10" font-weight="bold">PK  id : TEXT (BOP-001)</text>
+    <text x="15" y="75" fill="#cbd5e1" font-size="10">    name : TEXT</text>
+    <text x="15" y="95" fill="#cbd5e1" font-size="10">    location : TEXT</text>
+    <text x="15" y="115" fill="#cbd5e1" font-size="10">    sector : TEXT</text>
+    <text x="15" y="135" fill="#94a3b8" font-size="10">    rtsp_url : TEXT (masked)</text>
+    <text x="15" y="155" fill="#cbd5e1" font-size="10">    status : TEXT (ONLINE/IDLE)</text>
+    <text x="15" y="175" fill="#cbd5e1" font-size="10">    fps : INTEGER (5)</text>
+    <text x="15" y="195" fill="#f59e0b" font-size="10">    virtual_fence : JSONB</text>
+    <text x="15" y="215" fill="#64748b" font-size="9">    created_at : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- ================= TABLE: EVENTS ================= -->
+  <g transform="translate(410, 90)">
+    <rect width="280" height="240" rx="8" fill="#0f172a" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#b45309"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.events</text>
+    <text x="15" y="55" fill="#fbbf24" font-size="10" font-weight="bold">PK  id : TEXT (EVT-2026-...)</text>
+    <text x="15" y="75" fill="#38bdf8" font-size="10">FK  camera_id : TEXT -&gt; cameras</text>
+    <text x="15" y="95" fill="#cbd5e1" font-size="10">    track_id : INTEGER (104)</text>
+    <text x="15" y="115" fill="#f87171" font-size="10">    event_type : TEXT (INTRUSION)</text>
+    <text x="15" y="135" fill="#f87171" font-size="10">    severity : TEXT (CRITICAL)</text>
+    <text x="15" y="155" fill="#cbd5e1" font-size="10">    confidence : FLOAT8 (0.96)</text>
+    <text x="15" y="175" fill="#cbd5e1" font-size="10">    description : TEXT</text>
+    <text x="15" y="195" fill="#10b981" font-size="10">    evidence_url : TEXT</text>
+    <text x="15" y="215" fill="#64748b" font-size="9">    timestamp : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- ================= TABLE: ALERTS ================= -->
+  <g transform="translate(770, 90)">
+    <rect width="280" height="240" rx="8" fill="#0f172a" stroke="#dc2626" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#b91c1c"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.alerts</text>
+    <text x="15" y="55" fill="#f87171" font-size="10" font-weight="bold">PK  id : TEXT (ALT-2026-...)</text>
+    <text x="15" y="75" fill="#fbbf24" font-size="10">FK  event_id : TEXT -&gt; events</text>
+    <text x="15" y="95" fill="#38bdf8" font-size="10">FK  camera_id : TEXT -&gt; cameras</text>
+    <text x="15" y="115" fill="#cbd5e1" font-size="10">    title : TEXT</text>
+    <text x="15" y="135" fill="#f87171" font-size="10">    severity : TEXT</text>
+    <text x="15" y="155" fill="#4ade80" font-size="10">    status : TEXT (ACTIVE/RESOLVED)</text>
+    <text x="15" y="175" fill="#cbd5e1" font-size="10">    acknowledged_by : TEXT</text>
+    <text x="15" y="195" fill="#cbd5e1" font-size="10">    notes : TEXT</text>
+    <text x="15" y="215" fill="#64748b" font-size="9">    created_at : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- FK Lines Row 1 -->
+  <line x1="330" y1="165" x2="410" y2="165" stroke="#06b6d4" stroke-width="1.5" marker-end="url(#fk-arrow)"/>
+  <line x1="690" y1="165" x2="770" y2="165" stroke="#06b6d4" stroke-width="1.5" marker-end="url(#fk-arrow)"/>
+
+  <!-- ================= TABLE: FRIENDLY PERSONS ================= -->
+  <g transform="translate(50, 420)">
+    <rect width="280" height="220" rx="8" fill="#0f172a" stroke="#059669" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#047857"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.friendly_persons</text>
+    <text x="15" y="55" fill="#34d399" font-size="10" font-weight="bold">PK  id : TEXT (FP-001)</text>
+    <text x="15" y="75" fill="#cbd5e1" font-size="10">    person_code : TEXT (BSF-1024)</text>
+    <text x="15" y="95" fill="#cbd5e1" font-size="10">    full_name : TEXT</text>
+    <text x="15" y="115" fill="#cbd5e1" font-size="10">    role : TEXT (Inspector)</text>
+    <text x="15" y="135" fill="#cbd5e1" font-size="10">    unit : TEXT (12th BSF)</text>
+    <text x="15" y="155" fill="#a7f3d0" font-size="10">    status : TEXT (FRIENDLY)</text>
+    <text x="15" y="175" fill="#67e8f9" font-size="10">    face_embedding : FLOAT8[512]</text>
+    <text x="15" y="195" fill="#64748b" font-size="9">    created_at : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- ================= TABLE: PROFILES ================= -->
+  <g transform="translate(410, 420)">
+    <rect width="280" height="220" rx="8" fill="#0f172a" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#6d28d9"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.profiles (RBAC)</text>
+    <text x="15" y="55" fill="#c084fc" font-size="10" font-weight="bold">PK  id : UUID (auth.users)</text>
+    <text x="15" y="75" fill="#cbd5e1" font-size="10">    email : TEXT</text>
+    <text x="15" y="95" fill="#cbd5e1" font-size="10">    full_name : TEXT</text>
+    <text x="15" y="115" fill="#f43f5e" font-size="10" font-weight="bold">    role : TEXT (ADMIN/COMM/OP)</text>
+    <text x="15" y="135" fill="#cbd5e1" font-size="10">    department : TEXT</text>
+    <text x="15" y="155" fill="#cbd5e1" font-size="10">    badge_number : TEXT</text>
+    <text x="15" y="175" fill="#cbd5e1" font-size="10">    station : TEXT</text>
+    <text x="15" y="195" fill="#64748b" font-size="9">    created_at : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- ================= TABLE: AUDIT LOGS ================= -->
+  <g transform="translate(770, 420)">
+    <rect width="280" height="220" rx="8" fill="#0f172a" stroke="#475569" stroke-width="1.5"/>
+    <rect width="280" height="32" rx="8" fill="#334155"/>
+    <text x="140" y="21" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">public.audit_logs (Immutable)</text>
+    <text x="15" y="55" fill="#94a3b8" font-size="10" font-weight="bold">PK  id : TEXT</text>
+    <text x="15" y="75" fill="#c084fc" font-size="10">FK  user_id : TEXT</text>
+    <text x="15" y="95" fill="#cbd5e1" font-size="10">    user_name : TEXT</text>
+    <text x="15" y="115" fill="#cbd5e1" font-size="10">    user_role : TEXT</text>
+    <text x="15" y="135" fill="#38bdf8" font-size="10">    action : TEXT (ALERT_ACK)</text>
+    <text x="15" y="155" fill="#cbd5e1" font-size="10">    resource_type : TEXT</text>
+    <text x="15" y="175" fill="#f59e0b" font-size="10">    details : JSONB</text>
+    <text x="15" y="195" fill="#64748b" font-size="9">    timestamp : TIMESTAMPTZ</text>
+  </g>
+
+  <!-- FK Lines Row 2 -->
+  <line x1="690" y1="520" x2="770" y2="520" stroke="#06b6d4" stroke-width="1.5" marker-end="url(#fk-arrow)"/>
+
+  <!-- Storage Bucket Legend & Note -->
+  <g transform="translate(50, 680)">
+    <rect width="1000" height="85" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1.2"/>
+    <text x="25" y="28" fill="#34d399" font-size="11" font-weight="bold">PRIVATE STORAGE BUCKET: evidence</text>
+    <text x="25" y="48" fill="#94a3b8" font-size="10">• Accessible strictly via Signed URLs with 3600-second expiration. Direct anonymous public downloads blocked.</text>
+    <text x="25" y="66" fill="#94a3b8" font-size="10">• Fast service_role programmatic uploads triggered automatically by FastAPI upon CRITICAL event confirmation.</text>
+  </g>
+</svg>

@@ -1,6 +1,6 @@
 # IBVAP — Intelligent Border Video Analytics Platform
 
-An AI-based Border Surveillance & Tactical Video Analytics Platform designed for high-security command centers, border outposts (BOPs), and defense monitoring. Built for **Smart India Hackathon (SIH)**.
+An AI-based Border Surveillance & Tactical Video Analytics Platform designed for high-security command centers, border outposts (BOPs), and defense monitoring. Built for **Smart India Hackathon (SIH 2026)**.
 
 ---
 
@@ -36,6 +36,8 @@ IBVAP React Live Surveillance Dashboard (Vite / React 19)
   └── Tamper-Evident Audit Trail & User Management
 ```
 
+> Detailed architecture diagram: [`docs/architecture.svg`](file:///c:/Users/DELL/Desktop/sih%202/docs/architecture.svg) | Technical specification: [`docs/ARCHITECTURE.md`](file:///c:/Users/DELL/Desktop/sih%202/docs/ARCHITECTURE.md)
+
 ---
 
 ## ⚡ Tech Stack
@@ -44,7 +46,7 @@ IBVAP React Live Surveillance Dashboard (Vite / React 19)
 - **Backend API**: Python 3.12 + FastAPI + Uvicorn + WebSockets
 - **AI Vision**: YOLOv8 (Ultralytics) + ByteTrack + FaceNet (`facenet-pytorch`) + PaddleOCR
 - **Security & Auth**: Supabase Auth (JWT) + Row Level Security (RLS) + Custom RBAC Guards
-- **Database & Storage**: Supabase PostgreSQL + Supabase Private Storage Buckets
+- **Database & Storage**: Supabase PostgreSQL 15+ + Supabase Private Storage Buckets
 - **Deployment**: Docker + NVIDIA Container Toolkit (CUDA) + Docker Compose
 - **System Monitoring**: `psutil` + `nvidia-smi` / `torch.cuda` hardware monitor
 - **Visualizations**: Recharts + Lucide React + Framer Motion
@@ -52,111 +54,66 @@ IBVAP React Live Surveillance Dashboard (Vite / React 19)
 
 ---
 
-## 🎯 IBVAP SIH Demo Mode (End-to-End Walkthrough)
+## 📚 Detailed Documentation
 
-Follow these steps for a complete SIH demonstration:
+| Document | Description |
+| :--- | :--- |
+| [**Architecture Specification**](file:///c:/Users/DELL/Desktop/sih%202/docs/ARCHITECTURE.md) | In-depth multi-tier architecture & data flow diagrams |
+| [**API Documentation**](file:///c:/Users/DELL/Desktop/sih%202/docs/API_DOCUMENTATION.md) | Complete OpenAPI / REST & WebSocket endpoint catalog |
+| [**Database Schema**](file:///c:/Users/DELL/Desktop/sih%202/docs/DATABASE_SCHEMA.md) | PostgreSQL relational schemas, RLS policies, & storage buckets |
+| [**AI Pipeline Specification**](file:///c:/Users/DELL/Desktop/sih%202/docs/AI_PIPELINE.md) | Vision models, tracking algorithms, ANPR, & spatial event rules |
+| [**SIH Demo Guide**](file:///c:/Users/DELL/Desktop/sih%202/docs/DEMO_GUIDE.md) | 18-step presentation walkthrough sequence for evaluators |
+| [**SIH Readiness Checklist**](file:///c:/Users/DELL/Desktop/sih%202/docs/SIH_DEMO_CHECKLIST.md) | Verified component checklist based on automated test runs |
+| [**Deployment Guide**](file:///c:/Users/DELL/Desktop/sih%202/docs/DEPLOYMENT.md) | Local Python, Node.js, and Docker GPU setup instructions |
+| [**Security & RBAC Guide**](file:///c:/Users/DELL/Desktop/sih%202/docs/SECURITY.md) | Defense-in-depth, 4-tier RBAC matrix, and upload validation |
+| [**Testing Guide**](file:///c:/Users/DELL/Desktop/sih%202/docs/TESTING.md) | Unit tests, security tests, and 10-step E2E integration verification |
+| [**Troubleshooting Guide**](file:///c:/Users/DELL/Desktop/sih%202/docs/TROUBLESHOOTING.md) | Diagnostics and fixes for runtime and environment issues |
+| [**Project Status Report**](file:///c:/Users/DELL/Desktop/sih%202/docs/PROJECT_STATUS.md) | Factual component implementation & scope breakdown |
 
-### 1. Install Dependencies
+---
+
+## 🎯 Quick Start: SIH Demonstration Mode
+
+### 1. Backend Setup
 ```powershell
-# Backend Dependencies
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-# Frontend Dependencies
-cd ..
-npm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env` in both root and `backend/`:
-```powershell
-cp .env.example .env
-cp backend/.env.example backend/.env
-```
-
-### 3. Place Demo Video (or Auto-Generate)
-You can place a sample video at `sample_feed.mp4` or configure `DEMO_VIDEO_PATH` in `backend/.env`. If omitted, the platform automatically generates an OpenCV synthetic tactical border feed on startup!
-
-### 4. Start the FastAPI Backend
-```powershell
-cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
-API Documentation available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 5. Start the React Frontend Dashboard
+### 2. Frontend Setup
 ```powershell
+npm install
 npm run dev
 ```
-Access the tactical command center at: [http://localhost:5173](http://localhost:5173)
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-### 6. Start the Demonstration
-- Navigate to **Live Surveillance** on the frontend.
-- In the top **SIH DEMO MODE** toolbar, click **START DEMO** (Available to `ADMIN` and `COMMANDER`).
-- Alternatively, trigger via REST:
-  ```powershell
-  curl -X POST http://localhost:8000/api/demo/start -H "Authorization: Bearer <TOKEN>"
-  ```
-
-### 7. Open Live Surveillance
-Camera `DEMO-001` (**Border Surveillance Demo**) appears in the surveillance matrix with live status `ONLINE`.
-
-### 8. View Real-Time YOLO Detections
-The optical bounding overlay outlines moving targets (`person`, `car`, `truck`, `bus`, `motorcycle`) with dynamic confidence chips.
-
-### 9. View ByteTrack Target Tracking
-Targets maintain persistent track IDs (`P-101`, `P-102`) across frames with velocity vectors and occlusion resilience.
-
-### 10. View Spatial Event Engine Triggering
-When a tracked target enters the restricted virtual fence zone or loiters beyond the configured threshold, security events are computed.
-
-### 11. View Tactical Alerts & Sirens
-The top alert banner triggers critical audio sirens (Web Audio API) and creates triage items in the Alert Center.
-
-### 12. View Evidence Vault
-High-resolution evidence snapshots with bounding boxes and forensic metadata are uploaded to Supabase Storage and stored in the Evidence Vault.
-
-### 13. View Analytics & Fleet Telemetry
-Navigate to **Analytics** to view 7 Recharts panels with time windows (`1h`, `6h`, `24h`, `7d`, `30d`), fleet rankings, and GPU hardware telemetry.
-
-### 14. Stop Demo & Reset
-Click **STOP DEMO** or **RESET DEMO** on the Live Surveillance bar to halt ingestion and clear test counters without affecting production database records.
+### 3. One-Click Demo
+1. Log in with **Admin** clearance (`admin@ibvap.gov.in`).
+2. Go to **Live Surveillance**.
+3. In the top toolbar, click **START DEMO**.
+4. The system streams `DEMO-001` with real-time YOLO bounding boxes, ByteTrack IDs, biometric identification, and virtual fence intrusion triggers!
 
 ---
 
-### 🛠️ Troubleshooting Guide
+## 🧪 Testing & Verification
 
-- **GPU Acceleration Fallback**: If CUDA is not detected, PyTorch logs `CUDA not available. Using CPU for inference.` and executes multi-threaded CPU tensors without crashing.
-- **Video Codec Compatibility**: Ensure MP4 files use standard H.264 or MPEG-4 encoding. The platform automatically tries `mp4v` and `XVID` fallbacks.
-- **Supabase Offline Resilience**: If internet or database credentials are unavailable, the backend gracefully runs in `LOCAL_FALLBACK` mode using local caches.
-- **WebSocket Reconnection**: If the backend restarts, the frontend WebSocket service automatically enters exponential backoff retry until reconnecting.
-
----
-
-## 🐳 Docker Containerization & GPU Deployment
-
-The IBVAP backend is containerized for production deployment with full NVIDIA Container Toolkit GPU support:
-
-### Building and Starting Containers
+Run the complete 24-test verification suite:
 ```powershell
-# Build image
-docker compose build
+cd backend
+python -m unittest discover -s . -p "test_*.py"
+```
 
-# Start detached
-docker compose up -d
-
-# View live container logs
-docker compose logs -f ibvap-backend
-
-# Stop containers
-docker compose down
+Verify frontend production build:
+```powershell
+npm run build
 ```
 
 ---
 
-## 🛡️ Role-Based Access Control (RBAC) & Security
+## 🛡️ Security & Role-Based Access Control (RBAC)
 
 | Feature / Permission | `ADMIN` | `COMMANDER` | `OPERATOR` | `VIEWER` |
 | :--- | :---: | :---: | :---: | :---: |
@@ -172,22 +129,8 @@ docker compose down
 
 ---
 
-## 🧪 Testing & Verification
+## ⚠️ Known Scope & Evaluation Notes
 
-### Run Complete Test Suite (24 Tests)
-```powershell
-cd backend
-python -m unittest discover -s . -p "test_*.py"
-```
-Or run individual test modules:
-```powershell
-python test_integration_e2e.py    # 10/10 PASS: Complete 10-stage end-to-end pipeline verification
-python test_security.py           # 9/9 PASS: JWT validation, 401/403 RBAC guards, sanitize, upload check
-python test_system_health.py      # 5/5 PASS: GPU fallback, zero-camera fleet, empty metrics handling
-```
-
-### Frontend Build Verification
-```powershell
-npm run build
-```
-Compiled with zero TypeScript / JSX errors with optimized production bundle code splitting.
+1. **Hardware Telemetry**: GPU utilization and temperature reflect host NVIDIA hardware metrics when available; CPU fallback operates on standard hardware.
+2. **Biometric Whitelist**: Face recognition matches against enrolled Friendly Persons; unknown individuals are classified as `UNKNOWN` without fabricating threats.
+3. **ANPR Scope**: License plate character extraction uses PaddleOCR; non-standard or heavily damaged plates may result in partial character matches.
