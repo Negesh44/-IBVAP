@@ -1,7 +1,33 @@
 # IBVAP — Intelligent Border Video Analytics Platform
-## Python FastAPI AI Backend: YOLO Detection, ByteTrack Tracking, ANPR, Face Recognition & Event Detection Engine
+## Python FastAPI AI Backend: Real-Time CCTV Ingestion Pipeline, YOLO, ByteTrack, Face Recognition, ANPR & Event Engine
 
-This service provides the core AI vision, multi-object tracking, Automatic Number Plate Recognition (ANPR), Biometric Face Matching, and Real-time Event Detection Engine for IBVAP.
+This service provides the complete AI vision, multi-object tracking, Automatic Number Plate Recognition (ANPR), Biometric Face Matching, Event Detection Engine, and real-time IP CCTV RTSP streaming pipeline for IBVAP.
+
+---
+
+### End-to-End Real-Time CCTV Pipeline
+
+```
+IP CCTV Camera (RTSP / ONVIF / MP4)
+       │
+       ▼
+[ RTSPStreamCapture ] (OpenCV / FFmpeg with low-latency TCP buffer & auto-reconnection)
+       │
+       ▼
+[ CameraWorker Thread ] (Per-camera worker, bounded frame queue, FPS rate limiter)
+       │
+       ▼
+[ Unified Vision Pipeline ]
+  ├─ 1. YOLOv8 Object Detection (person, car, truck, bus, motorcycle)
+  ├─ 2. ByteTrack Multi-Object Tracking (persistent cross-frame track IDs)
+  ├─ 3. Biometric Face Recognition (InceptionResnetV1 friendly matching)
+  ├─ 4. ANPR (PaddleOCR license plate extraction)
+  └─ 5. Event Engine (Virtual Fence Intrusion, Loitering, Night Movement, Stationary Behavior)
+       │
+       ├─► Supabase (Events & Alerts database tables)
+       ├─► MJPEG Preview (GET /api/streams/{camera_id}/preview for local dev)
+       └─► WebSocket Channel (/ws/live/{camera_id}) ──► React Live Surveillance Dashboard
+```
 
 ---
 
@@ -9,16 +35,23 @@ This service provides the core AI vision, multi-object tracking, Automatic Numbe
 
 ```
 backend/
-├── main.py                     # FastAPI application, CORS, routers & WebSocket /ws/live
-├── requirements.txt            # Python dependencies (FastAPI, Ultralytics, PyTorch, PaddleOCR, Facenet-PyTorch, Supabase)
-├── .env                        # Environment configuration, Vision hyperparameters & Event rule thresholds
+├── main.py                     # FastAPI app, CORS, routers & WebSocket endpoints (/ws/live/{camera_id})
+├── requirements.txt            # Python dependencies (FastAPI, OpenCV, Ultralytics, PyTorch, PaddleOCR, Supabase)
+├── .env                        # Environment configuration, Vision & Streaming parameters
 ├── test_detect_api.py          # Standalone test client for /api/detect
 ├── test_tracking_api.py        # Standalone test client for ByteTrack persistence
 ├── test_anpr_api.py            # Standalone test client for /api/anpr
 ├── test_face_api.py            # Standalone test client for /api/face/recognize & register
-├── test_event_engine.py        # Comprehensive test suite for Event Detection Engine rules
+├── test_event_engine.py        # Test suite for Event Detection Engine rules
+├── test_streaming_pipeline.py  # Test suite for CCTV Ingestion & Real-Time Streaming
 ├── migrations/
 │   └── 01_face_embeddings.sql  # Supabase schema migration for face_embeddings with RLS
+├── streaming/
+│   ├── __init__.py
+│   ├── rtsp_manager.py         # RTSP stream capture, FPS rate control & auto-reconnection logic
+│   ├── camera_worker.py        # Dedicated background worker thread per active camera
+│   ├── frame_processor.py      # Unified AI vision chain (YOLO + ByteTrack + Face + ANPR + Events)
+│   └── stream_manager.py       # Fleet coordinator managing camera workers & WebSocket broadcasts
 ├── ai/
 │   ├── __init__.py
 │   ├── model_loader.py         # Lazy YOLO model loader with automatic CUDA / CPU allocation
@@ -52,6 +85,7 @@ backend/
 │   └── event_service.py        # Legacy event dispatch helper
 ├── api/
 │   ├── __init__.py
+│   ├── streams.py              # POST start/stop, GET status, health, and MJPEG preview
 │   ├── events.py               # POST /api/events/analyze, POST /api/events/fence, GET /api/events
 │   ├── face.py                 # POST /api/face/recognize & POST /api/face/register/{id}
 │   ├── anpr.py                 # POST /api/anpr
@@ -66,49 +100,35 @@ backend/
 
 ---
 
-### Event Detection Engine & Security Rules
-
-The Event Detection Engine analyzes real-time detections and tracks to identify security-relevant occurrences without generating false frame-by-frame alert storms:
-
-1. **Virtual Fence / Intrusion Detection (`INTRUSION` - `CRITICAL`)**:
-   - Each camera supports a custom polygon boundary `[[x1, y1], [x2, y2], ...]`.
-   - Uses Ray-Casting Point-in-Polygon testing on target ground-contact points.
-   - Detects state transitions (`ENTERED`, `INSIDE`, `LEFT`).
-2. **Loitering Detection (`LOITERING` - `WARNING`)**:
-   - Measures continuous dwell time within restricted or general camera FOVs.
-   - Configurable trigger threshold: `LOITERING_THRESHOLD_SECONDS=30`.
-3. **Night Movement Detection (`NIGHT_MOVEMENT` - `WARNING`)**:
-   - Evaluates frame luminance against `NIGHT_BRIGHTNESS_THRESHOLD=50`.
-   - Generates non-hostile situational warnings for operators.
-4. **Stationary Person Behavior (`STATIONARY_PERSON` - `INFO`)**:
-   - Flags targets that remain still within spatial displacement threshold (`STATIONARY_DISPLACEMENT_PX=30`) for `STATIONARY_THRESHOLD_SECONDS=60`.
-5. **Debounce & Cooldown Engine**:
-   - Cooldown period (`EVENT_COOLDOWN_SECONDS=30`) keyed by `(camera_id, track_id, event_type)` ensures operators are not flooded with duplicate alerts every frame.
-6. **Supabase Event & Alert Persistence**:
-   - Auto-syncs triggered events into the Supabase `events` table.
-   - High-severity occurrences (`CRITICAL` & `WARNING`) generate actionable records in the `alerts` table for human operator review.
-   - No autonomous aggressive actions are taken.
-
----
-
-### Configurable Environment Variables (`.env`)
+### Environment Variables (`backend/.env`)
 
 ```env
-# YOLO Object Detection
+# Server Settings
+HOST=0.0.0.0
+PORT=8000
+ENVIRONMENT=development
+CORS_ORIGINS=*
+
+# Supabase Credentials (Server-side Only)
+SUPABASE_URL=https://tlpdoykzxpwzvhzypsqq.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=sb_publishable_aezuXbrKhTWnvUMXo9L1oA_PIpWioCM
+
+# AI Vision & YOLO Inference Settings
 YOLO_MODEL_PATH=weights/best.pt
 YOLO_CONFIDENCE=0.40
 
-# ByteTrack Multi-Object Tracker
+# ByteTrack Multi-Object Tracker Settings
 TRACKER_TRACK_THRESH=0.40
 TRACKER_TRACK_BUFFER=30
 TRACKER_MATCH_THRESH=0.80
 
-# ANPR (Automatic Number Plate Recognition)
+# ANPR Settings
 ANPR_MODEL_PATH=
 ANPR_CONFIDENCE=0.40
 OCR_CONFIDENCE=0.50
 
-# Biometric Face Recognition
+# Biometric Face Recognition Settings
 FACE_MODEL_PATH=
 FACE_MATCH_THRESHOLD=0.45
 FACE_DETECTION_CONFIDENCE=0.50
@@ -125,112 +145,174 @@ SEVERITY_INTRUSION=CRITICAL
 SEVERITY_LOITERING=WARNING
 SEVERITY_NIGHT_MOVEMENT=WARNING
 SEVERITY_STATIONARY_PERSON=INFO
+
+# CCTV Ingestion & Real-Time Processing Pipeline
+PROCESS_FPS=5
+RTSP_RECONNECT_INTERVAL=5
+RTSP_MAX_RETRIES=10
+STREAM_SOURCE_MODE=rtsp
+TEST_VIDEO_PATH=sample_feed.mp4
 ```
 
 ---
 
-### Available Endpoints
+### Quick Start & Installation
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Diagnostics, uptime, and database status |
-| `GET` | `/api/cameras` | List cameras from Supabase |
-| `GET` | `/api/events` | List historical security events |
-| `POST` | `/api/events/analyze` | Evaluate detections & tracks against security rules |
-| `POST` | `/api/events/fence` | Configure spatial virtual fence polygon for a camera |
-| `GET` | `/api/events/fence/{id}`| Retrieve active virtual fence polygon vertices |
-| `GET` | `/api/alerts` | Active and historical perimeter alerts |
-| `POST` | `/api/detect` | Direct YOLO object detection on image frame |
-| `POST` | `/api/track` | YOLO + ByteTrack multi-object tracking |
-| `POST` | `/api/track/reset/{id}` | Reset tracking state for specific camera |
-| `POST` | `/api/anpr` | Vehicle detection + license plate OCR |
-| `POST` | `/api/face/recognize` | Face detection + Friendly Person biometric match |
-| `POST` | `/api/face/register/{id}` | Enroll personnel face into biometric database |
-| `WS` | `/ws/live` | Real-time WebSocket streaming bounding boxes |
+#### 1. Navigate to backend directory:
+```bash
+cd backend
+```
+
+#### 2. Create and activate a Python Virtual Environment:
+
+**Windows (PowerShell):**
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+**Linux / macOS:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+#### 3. Install required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+#### 4. Start the FastAPI Server:
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+Or directly:
+```bash
+python main.py
+```
 
 ---
 
-### Configuring a Virtual Fence & Testing
+### CCTV Stream Operation Modes
 
-#### 1. Configure a Virtual Fence for Camera (`POST /api/events/fence`)
+#### A. Running with a Local MP4 Video File (Development / Demo Mode)
+To test without physical CCTV hardware:
+1. Place a test video in `backend/sample_feed.mp4` (or specify in `.env`).
+2. Update `.env`:
+   ```env
+   STREAM_SOURCE_MODE=video_file
+   TEST_VIDEO_PATH=sample_feed.mp4
+   ```
+3. Start the stream:
+   ```bash
+   curl -X POST "http://localhost:8000/api/streams/start/BOP-001"
+   ```
+
+#### B. Running with an RTSP IP CCTV Camera
+1. Update `.env`:
+   ```env
+   STREAM_SOURCE_MODE=rtsp
+   ```
+2. Start the camera with its RTSP stream URL:
+   ```bash
+   curl -X POST "http://localhost:8000/api/streams/start/BOP-001?rtsp_url=rtsp://admin:password@192.168.1.100:554/h264Preview_01_main"
+   ```
+
+#### C. Stopping a Camera Stream
 ```bash
-curl -X POST "http://localhost:8000/api/events/fence" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "camera_id": "BOP-001",
-       "zone": [
-         [100, 100],
-         [500, 100],
-         [500, 400],
-         [100, 400]
-       ]
-     }'
+curl -X POST "http://localhost:8000/api/streams/stop/BOP-001"
 ```
 
-#### 2. Analyze CCTV Frame Telemetry (`POST /api/events/analyze`)
+#### D. Checking Fleet Health & Active Streams
 ```bash
-curl -X POST "http://localhost:8000/api/events/analyze" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "camera_id": "BOP-001",
-       "frame_width": 1920,
-       "frame_height": 1080,
-       "brightness": 35.0,
-       "tracks": [
-         {
-           "track_id": 104,
-           "object_type": "person",
-           "confidence": 0.96,
-           "bbox": [200, 150, 300, 350]
-         }
-       ]
-     }'
+curl -X GET "http://localhost:8000/api/streams/health"
 ```
 
-#### Expected JSON Output:
-```json
-{
-  "camera_id": "BOP-001",
-  "events_count": 2,
-  "events": [
-    {
-      "event_id": "EVT-INT-9F12A8B4",
-      "camera_id": "BOP-001",
-      "track_id": 104,
-      "event_type": "INTRUSION",
-      "severity": "CRITICAL",
-      "confidence": 0.96,
-      "description": "Person entered restricted virtual fence zone",
-      "bbox": [200, 150, 300, 350],
-      "timestamp": "2026-09-29T12:00:00.000Z",
-      "metadata": {
-        "rule": "VIRTUAL_FENCE_POLYGON",
-        "state_transition": "ENTERED",
-        "reference_point": [250.0, 350.0]
-      }
-    },
-    {
-      "event_id": "EVT-NGT-3B77E2A1",
-      "camera_id": "BOP-001",
-      "track_id": 104,
-      "event_type": "NIGHT_MOVEMENT",
-      "severity": "WARNING",
-      "confidence": 0.96,
-      "description": "Person movement detected during low-light/night conditions",
-      "bbox": [200, 150, 300, 350],
-      "timestamp": "2026-09-29T12:00:00.000Z",
-      "metadata": {
-        "rule": "LOW_LIGHT_AMBIENT_DETECTION",
-        "frame_brightness": 35.0,
-        "brightness_threshold": 50.0
-      }
-    }
-  ],
-  "timestamp": "2026-09-29T12:00:00.000Z"
-}
+#### E. MJPEG Local Preview (Browser Inspection)
+Open in browser for visual preview:
+```
+http://localhost:8000/api/streams/BOP-001/preview
 ```
 
-#### 3. Running Unit & Integration Tests:
+---
+
+### React WebSocket Connection
+
+Connect to the camera-specific telemetry WebSocket channel from the React frontend:
+
+```javascript
+// React Live Surveillance WebSocket Hook Example:
+const cameraCode = "BOP-001";
+const wsUrl = `ws://localhost:8000/ws/live/${cameraCode}`;
+
+const ws = new WebSocket(wsUrl);
+
+ws.onopen = () => {
+  console.log(`Connected to CCTV stream: ${cameraCode}`);
+};
+
+ws.onmessage = (event) => {
+  const telemetry = JSON.parse(event.data);
+  // telemetry: {
+  //   camera_id: "BOP-001",
+  //   frame_timestamp: "2026-09-29T12:00:00.000Z",
+  //   detections: [
+  //     {
+  //       track_id: 104,
+  //       object_type: "person",
+  //       confidence: 0.96,
+  //       bbox: [120, 180, 280, 520],
+  //       identity: "Capt. Arjun Sharma",
+  //       friendly: true
+  //     }
+  //   ],
+  //   events: [...]
+  // }
+  setDetections(telemetry.detections);
+  if (telemetry.events && telemetry.events.length > 0) {
+    handleNewEvents(telemetry.events);
+  }
+};
+
+ws.onclose = () => {
+  console.log("WebSocket disconnected. Retrying...");
+};
+```
+
+---
+
+### Troubleshooting RTSP Connection Errors
+
+1. **Camera OFFLINE / Connection Refused**:
+   - Verify camera IP address and port: `ping <camera-ip>` or `telnet <camera-ip> 554`.
+   - Ensure RTSP authentication credentials (username/password) are correct in the URL.
+   - If using Wi-Fi cameras with packet loss, increase `RTSP_RECONNECT_INTERVAL=5` and `RTSP_MAX_RETRIES=15`.
+2. **High Latency / Video Lag**:
+   - `PROCESS_FPS` defaults to `5` frames per second to ensure AI inference keeps up with real-time video without frame buffer buildup.
+   - Ensure OpenCV FFmpeg capture flags are set to TCP: `OPENCV_FFMPEG_CAPTURE_OPTIONS="rtsp_transport;tcp|fflags;nobuffer|max_delay;500000"`.
+3. **ONVIF Discovery**:
+   - RTSP URL configuration is the primary, deterministic method for connecting CCTV cameras. Explicit RTSP URLs can be set via `cameras` table in Supabase or overridden dynamically at `POST /api/streams/start/{camera_id}?rtsp_url=...`.
+
+---
+
+### Running Automated Test Suites
+
 ```bash
+# Test Real-Time CCTV Ingestion Pipeline & Reconnection
+python test_streaming_pipeline.py
+
+# Test Event Detection Engine (Virtual Fence, Loitering, Night Movement)
 python test_event_engine.py
+
+# Test Biometric Face Recognition
+python test_face_api.py
+
+# Test Automatic Number Plate Recognition (ANPR)
+python test_anpr_api.py
+
+# Test YOLO Inference Endpoint
+python test_detect_api.py
+
+# Test ByteTrack Multi-Object Tracking Persistence
+python test_tracking_api.py
 ```

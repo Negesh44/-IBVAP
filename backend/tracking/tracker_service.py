@@ -31,6 +31,13 @@ class TrackerService:
             self.camera_trackers[camera_id] = ByteTrackTracker()
         return self.camera_trackers[camera_id]
 
+    def update_camera_feed(self, camera_id: str, detections: List[Dict[str, Any]]) -> List[Any]:
+        """
+        Updates the camera's tracker instance with new detections.
+        """
+        tracker = self.get_tracker(camera_id)
+        return tracker.update(detections)
+
     def reset_camera_tracker(self, camera_id: str) -> bool:
         """
         Resets tracking state and Kalman filters for a specific camera.

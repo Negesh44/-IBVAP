@@ -172,6 +172,7 @@ class YOLODetector:
 
 # Singleton detector instance
 yolo_detector = YOLODetector()
+detector = yolo_detector
 
 # Top-level reusable function
 def detect_frame(frame: Union[bytes, Image.Image, Any], conf_threshold: Optional[float] = None) -> List[Dict[str, Any]]:
