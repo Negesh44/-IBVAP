@@ -19,12 +19,23 @@ class DetectionItem(BaseModel):
 
 class YOLODetectionItem(BaseModel):
     """
-    Object detection output schema for /api/detect endpoint.
+    Object detection output schema.
     """
     class_id: int = Field(..., description="Target class ID: 0=person, 1=car, 2=truck, 3=bus, 4=motorcycle")
     object_type: str = Field(..., description="Class name: person, car, truck, bus, motorcycle")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Model confidence score")
     bbox: List[int] = Field(..., min_length=4, max_length=4, description="Bounding box coordinates [x1, y1, x2, y2]")
+
+
+class TrackedItem(BaseModel):
+    """
+    ByteTrack tracked object output schema with persistent track ID.
+    """
+    track_id: int = Field(..., description="Persistent multi-object tracking ID assigned by ByteTrack")
+    class_id: int = Field(..., description="Target class ID: 0=person, 1=car, 2=truck, 3=bus, 4=motorcycle")
+    object_type: str = Field(..., description="Class name: person, car, truck, bus, motorcycle")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence score")
+    bbox: List[int] = Field(..., min_length=4, max_length=4, description="Tracked bounding box coordinates [x1, y1, x2, y2]")
 
 
 class DetectImageResponse(BaseModel):
@@ -35,6 +46,17 @@ class DetectImageResponse(BaseModel):
     inference_time_ms: float = Field(..., description="Inference latency in milliseconds")
     image_width: int = Field(..., description="Image width in pixels")
     image_height: int = Field(..., description="Image height in pixels")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
+
+
+class TrackResponse(BaseModel):
+    """
+    Response schema for POST /api/track endpoint.
+    """
+    detections: List[YOLODetectionItem] = Field(..., description="Raw YOLO detections")
+    tracking: List[TrackedItem] = Field(..., description="Persistent ByteTrack multi-object tracks")
+    inference_time_ms: float = Field(..., description="YOLO inference latency in ms")
+    tracking_time_ms: float = Field(..., description="ByteTrack association latency in ms")
     timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
 
 

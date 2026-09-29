@@ -21,6 +21,7 @@ from api.cameras import router as cameras_router
 from api.detections import router as detections_router
 from api.events import router as events_router
 from api.alerts import router as alerts_router
+from api.tracking import router as tracking_router
 
 # Logging Configuration
 logging.basicConfig(
@@ -92,6 +93,7 @@ app.include_router(cameras_router)
 app.include_router(detections_router)
 app.include_router(events_router)
 app.include_router(alerts_router)
+app.include_router(tracking_router)
 
 
 # -------------------------------------------------------------

@@ -1,7 +1,7 @@
 # IBVAP — Intelligent Border Video Analytics Platform
-## Python FastAPI AI Backend & YOLO Inference Layer
+## Python FastAPI AI Backend, YOLO Inference & ByteTrack Tracking Layer
 
-This service provides the AI inference layer for IBVAP, exposing REST endpoints for camera telemetry, alert triage, and direct YOLO object detection inference on image frames, alongside a live WebSocket streaming channel for real-time tracking feeds.
+This service provides the AI vision and multi-object tracking layer for IBVAP, exposing REST endpoints for camera telemetry, alert triage, direct YOLO object detection, and ByteTrack-based persistent multi-object tracking, alongside a live WebSocket streaming channel for real-time tracking feeds.
 
 ---
 
@@ -11,12 +11,17 @@ This service provides the AI inference layer for IBVAP, exposing REST endpoints 
 backend/
 ├── main.py                     # FastAPI application, CORS, routers & WebSocket /ws/live
 ├── requirements.txt            # Python dependencies (FastAPI, Ultralytics, PyTorch, Supabase)
-├── .env                        # Environment configuration & YOLO hyperparameters
+├── .env                        # Environment configuration, YOLO & ByteTrack hyperparameters
 ├── test_detect_api.py          # Standalone test client for /api/detect
+├── test_tracking_api.py        # Standalone test client for ByteTrack persistence
 ├── ai/
 │   ├── __init__.py
 │   ├── model_loader.py         # Lazy YOLO model loader with automatic CUDA / CPU allocation
 │   └── detector.py             # 5-class detector and reusable detect_frame() function
+├── tracking/
+│   ├── __init__.py
+│   ├── bytetrack_tracker.py    # ByteTrack Kalman filter & dual-stage IoU association
+│   └── tracker_service.py      # Multi-camera isolated tracker instances & downstream hooks
 ├── services/
 │   ├── __init__.py
 │   ├── inference_service.py    # Coordinates image decoding, detection & latency metrics
@@ -25,6 +30,7 @@ backend/
 │   └── event_service.py        # Threat evaluation & alert dispatch
 ├── api/
 │   ├── __init__.py
+│   ├── tracking.py             # POST /api/track & POST /api/track/reset/{camera_id}
 │   ├── detections.py           # POST /api/detect & GET /api/detections
 │   ├── cameras.py              # GET /api/cameras & GET /api/cameras/{id}
 │   ├── events.py               # GET /api/events
@@ -38,7 +44,7 @@ backend/
 
 ### Supported Target Classes
 
-The detector is configured for 5 primary tactical classes:
+The detector and tracker track 5 primary tactical classes:
 
 | Class ID | Target Class | Description |
 |---|---|---|
@@ -47,6 +53,18 @@ The detector is configured for 5 primary tactical classes:
 | `2` | `truck` | Heavy transport / cargo / military trucks |
 | `3` | `bus` | Passenger buses / transport carriers |
 | `4` | `motorcycle` | Two-wheelers / motorbikes / ATVs |
+
+---
+
+### ByteTrack Tracking Parameters (`.env`)
+
+Configure tracking hyperparameters via environment variables:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `TRACKER_TRACK_THRESH` | `0.40` | Detection confidence threshold for primary track association |
+| `TRACKER_TRACK_BUFFER` | `30` | Number of frames to keep lost tracks before deletion |
+| `TRACKER_MATCH_THRESH` | `0.80` | IoU match threshold for high-confidence association |
 
 ---
 
@@ -76,23 +94,18 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### 4. Configure YOLO Model Path & Confidence (`.env`):
+#### 4. Configure YOLO & Tracker Settings (`.env`):
 Edit `backend/.env` or export environment variables:
 ```bash
-# Set path to your trained .pt weights file (relative to backend/ or absolute path):
+# Set path to your trained .pt weights file:
 export YOLO_MODEL_PATH="weights/best.pt"
-
-# Set minimum confidence threshold (default: 0.40):
 export YOLO_CONFIDENCE=0.40
-```
 
-On Windows (PowerShell):
-```powershell
-$env:YOLO_MODEL_PATH="weights/best.pt"
-$env:YOLO_CONFIDENCE="0.40"
+# Tracker settings:
+export TRACKER_TRACK_THRESH=0.40
+export TRACKER_TRACK_BUFFER=30
+export TRACKER_MATCH_THRESH=0.80
 ```
-
-> **Hardware Acceleration:** The detector automatically detects if an NVIDIA CUDA GPU is available (`torch.cuda.is_available()`) and allocates inference to `cuda:0`. If no GPU is present, it seamlessly falls back to CPU execution without manual configuration.
 
 #### 5. Start the FastAPI Server:
 ```bash
@@ -111,27 +124,19 @@ The server will be available at:
 
 ---
 
-### Testing the YOLO Inference Endpoint (`POST /api/detect`)
+### Testing the Endpoints
 
-#### Option A: Using `curl`
+#### 1. Multi-Object Tracking Endpoint (`POST /api/track`)
 
-Upload an image file (`frame.jpg`) to test object detection:
-
+**Using `curl`:**
 ```bash
-curl -X POST "http://localhost:8000/api/detect?confidence=0.40" \
+curl -X POST "http://localhost:8000/api/track?camera_id=BOP-001&confidence=0.40" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
-     -F "file=@path/to/your/image.jpg"
+     -F "file=@sample_border_frame.jpg"
 ```
 
-#### Option B: Using Python `requests`
-
-Run the included automated test client:
-```bash
-python test_detect_api.py
-```
-
-#### Example JSON Response:
+**Response Format:**
 ```json
 {
   "detections": [
@@ -140,43 +145,38 @@ python test_detect_api.py
       "object_type": "person",
       "confidence": 0.94,
       "bbox": [120, 180, 280, 520]
-    },
-    {
-      "class_id": 1,
-      "object_type": "car",
-      "confidence": 0.88,
-      "bbox": [340, 210, 620, 480]
     }
   ],
-  "inference_time_ms": 16.8,
-  "image_width": 1920,
-  "image_height": 1080,
-  "timestamp": "2026-09-29T08:00:00.000Z"
+  "tracking": [
+    {
+      "track_id": 104,
+      "class_id": 0,
+      "object_type": "person",
+      "confidence": 0.94,
+      "bbox": [120, 180, 280, 520]
+    }
+  ],
+  "inference_time_ms": 16.4,
+  "tracking_time_ms": 1.2,
+  "timestamp": "2026-09-29T12:00:00.000Z"
 }
 ```
 
----
+#### 2. Reset Camera Tracking State (`POST /api/track/reset/{camera_id}`)
+```bash
+curl -X POST "http://localhost:8000/api/track/reset/BOP-001"
+```
 
-### Reusable Function Usage
-
-In Python scripts, you can directly import and use `detect_frame()`:
-
-```python
-from ai.detector import detect_frame
-from PIL import Image
-
-image = Image.open("sample_border_frame.jpg")
-detections = detect_frame(image, conf_threshold=0.45)
-
-for det in detections:
-    print(f"Detected {det['object_type']} ({det['confidence'] * 100}%) at bbox {det['bbox']}")
+#### 3. Run Automated Frame-to-Frame Persistence Verification:
+```bash
+python test_tracking_api.py
 ```
 
 ---
 
-### Notes on Upcoming Pipeline Modules
+### Downstream Pipeline Integration Hooks
 
-- **ByteTrack Multi-Object Tracking**: Will wrap `detect_frame()` to assign persistent track IDs (`P-104`, `V-021`) across consecutive video frames.
-- **Biometric Face Recognition**: 512-dimensional embedding comparison against the `friendly_persons` dossier.
-- **ANPR (License Plate Recognition)**: OCR character recognition on detected vehicle bounding boxes.
-- **Spatial Tripwire & Virtual Fence**: Vector containment and perimeter breach classification.
+The `TrackerService` in [`tracking/tracker_service.py`](./tracking/tracker_service.py) outputs stable `track_id` objects that will feed future analytics modules:
+1. **Virtual Fence / Spatial Tripwire**: Evaluates whether a track ID's trajectory crosses restricted polygon boundaries.
+2. **Loitering Detection**: Calculates dwell time for persistent track IDs in sensitive zones.
+3. **Face Biometrics & ANPR**: Attaches recognized identities/plates to persistent object IDs without needing re-identification on every single frame.
