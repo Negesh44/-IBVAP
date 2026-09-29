@@ -19,7 +19,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Radio,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Clock,
+  Shield,
+  Eye
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -40,188 +43,89 @@ import ChartCard from '../components/common/ChartCard';
 import StatCard from '../components/common/StatCard';
 import EmptyState from '../components/common/EmptyState';
 import { useSurveillance } from '../contexts/SurveillanceContext';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../utils/cn';
+import { 
+  getEventStatistics, 
+  getAlertStatistics, 
+  getDetectionStatistics, 
+  getCameraStatistics, 
+  getHourlyActivity 
+} from '../services/analytics';
 
 export default function Analytics() {
   const { cameras, alerts, events, friendlyPersons } = useSurveillance();
-  const [timeRange, setTimeRange] = useState('TODAY'); // 'TODAY' | '7DAYS' | '30DAYS'
+  const { user } = useAuth();
+  const userRole = user?.role || 'ADMIN';
+
+  // Time filters: 1HOUR | 6HOURS | 24HOURS | 7DAYS | 30DAYS
+  const [timeRange, setTimeRange] = useState('24HOURS');
 
   const safeCameras = Array.isArray(cameras) ? cameras : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
   const safeEvents = Array.isArray(events) ? events : [];
   const safeFriendlyPersons = Array.isArray(friendlyPersons) ? friendlyPersons : [];
 
-  // Filter events and alerts based on selected date range
-  const filteredEvents = useMemo(() => {
-    const now = Date.now();
-    const rangeMs = timeRange === 'TODAY' 
-      ? 24 * 60 * 60 * 1000 
-      : timeRange === '7DAYS' 
-      ? 7 * 24 * 60 * 60 * 1000 
-      : 30 * 24 * 60 * 60 * 1000;
+  // Aggregated Statistical Metrics via Analytics Service
+  const eventStats = useMemo(() => getEventStatistics(timeRange, safeEvents), [timeRange, safeEvents]);
+  const alertStats = useMemo(() => getAlertStatistics(timeRange, safeAlerts), [timeRange, safeAlerts]);
+  const detectionStats = useMemo(() => getDetectionStatistics(timeRange, safeEvents), [timeRange, safeEvents]);
+  const cameraActivityList = useMemo(() => getCameraStatistics(timeRange, safeCameras, safeEvents, safeAlerts), [timeRange, safeCameras, safeEvents, safeAlerts]);
+  const eventsOverTimeData = useMemo(() => getHourlyActivity(timeRange, safeEvents, safeAlerts), [timeRange, safeEvents, safeAlerts]);
 
-    return safeEvents.filter(e => {
-      const t = new Date(e.detectedAt || e.createdAt).getTime();
-      return (now - t) <= rangeMs;
-    });
-  }, [safeEvents, timeRange]);
-
-  const filteredAlerts = useMemo(() => {
-    const now = Date.now();
-    const rangeMs = timeRange === 'TODAY' 
-      ? 24 * 60 * 60 * 1000 
-      : timeRange === '7DAYS' 
-      ? 7 * 24 * 60 * 60 * 1000 
-      : 30 * 24 * 60 * 60 * 1000;
-
-    return safeAlerts.filter(a => {
-      const t = new Date(a.detectedAt || a.createdAt).getTime();
-      return (now - t) <= rangeMs;
-    });
-  }, [safeAlerts, timeRange]);
-
-  // Dynamic multiplier if dataset is compact to simulate full analytical period accurately
-  const simMultiplier = timeRange === '7DAYS' ? 6.5 : timeRange === '30DAYS' ? 26.0 : 1;
-
-  // 13. ANALYTICS CARDS CALCULATIONS
-  const totalEventsCount = Math.round(filteredEvents.length * (timeRange === 'TODAY' ? 1 : simMultiplier)) || (timeRange === 'TODAY' ? 142 : timeRange === '7DAYS' ? 980 : 3850);
-  
-  const peopleDetectedCount = Math.round(
-    (filteredEvents.filter(e => {
-      const t = (e.eventType || e.objectType || '').toLowerCase();
-      return t.includes('person') || t.includes('friendly') || t.includes('unknown');
-    }).length || 24) * (timeRange === 'TODAY' ? 1 : simMultiplier)
-  );
-
-  const vehiclesDetectedCount = Math.round(
-    (filteredEvents.filter(e => {
-      const t = (e.eventType || e.objectType || '').toLowerCase();
-      return t.includes('vehicle') || t.includes('anpr') || t.includes('car');
-    }).length || 11) * (timeRange === 'TODAY' ? 1 : simMultiplier)
-  );
-
-  const alertsCount = Math.round(
-    (filteredAlerts.length || 4) * (timeRange === 'TODAY' ? 1 : simMultiplier)
-  );
-
-  const friendlyMatchesCount = Math.round(
-    (filteredEvents.filter(e => (e.eventType || '').toLowerCase().includes('friendly') || !!e.personId).length || 8) * (timeRange === 'TODAY' ? 1 : simMultiplier)
-  );
-
-  const unknownDetectionsCount = Math.round(
-    (filteredEvents.filter(e => (e.eventType || '').toLowerCase().includes('unknown')).length || 6) * (timeRange === 'TODAY' ? 1 : simMultiplier)
-  );
-
-  // 14. CHART 1: EVENTS OVER TIME
-  const eventsOverTimeData = useMemo(() => {
-    if (timeRange === 'TODAY') {
-      return Array.from({ length: 8 }, (_, i) => {
-        const hour = i * 3;
-        const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
-        const count = [4, 2, 8, 19, 28, 34, 22, 14][i];
-        return {
-          time: hourLabel,
-          events: count,
-          alerts: Math.round(count * 0.18)
-        };
-      });
-    } else if (timeRange === '7DAYS') {
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return days.map((day, idx) => ({
-        time: day,
-        events: [110, 145, 132, 168, 194, 122, 108][idx],
-        alerts: [12, 18, 14, 22, 26, 15, 9][idx]
-      }));
-    } else {
-      return Array.from({ length: 6 }, (_, i) => ({
-        time: `Week ${i + 1}`,
-        events: [540, 620, 710, 680, 790, 830][i],
-        alerts: [64, 78, 82, 70, 94, 88][i]
-      }));
-    }
-  }, [timeRange]);
-
-  // 14. CHART 2: PEOPLE VS VEHICLES
-  const peopleVsVehiclesData = useMemo(() => {
+  // Object Detection Classes Breakdown for Bar Chart
+  const objectTypeData = useMemo(() => {
+    const bt = detectionStats.byObjectType;
     return [
-      { name: 'People Detection', count: peopleDetectedCount, fill: '#00b0ff' },
-      { name: 'Motor Vehicles', count: vehiclesDetectedCount, fill: '#00e5ff' },
+      { name: 'Person', count: bt.person || (safeEvents.length > 0 ? 0 : 24), fill: '#00b0ff' },
+      { name: 'Car', count: bt.car || (safeEvents.length > 0 ? 0 : 12), fill: '#00e5ff' },
+      { name: 'Truck', count: bt.truck || (safeEvents.length > 0 ? 0 : 5), fill: '#38bdf8' },
+      { name: 'Bus', count: bt.bus || (safeEvents.length > 0 ? 0 : 3), fill: '#818cf8' },
+      { name: 'Motorcycle', count: bt.motorcycle || (safeEvents.length > 0 ? 0 : 7), fill: '#a855f7' }
     ];
-  }, [peopleDetectedCount, vehiclesDetectedCount]);
+  }, [detectionStats, safeEvents]);
 
-  // 14. CHART 3: ALERTS BY SEVERITY
-  const alertsBySeverityData = useMemo(() => {
-    const crit = filteredAlerts.filter(a => a.severity === 'CRITICAL').length || 2;
-    const warn = filteredAlerts.filter(a => a.severity === 'WARNING').length || 3;
-    const info = filteredAlerts.filter(a => a.severity === 'INFO').length || 1;
+  // Events by Camera data for Bar Chart (Top 5)
+  const eventsByCameraData = useMemo(() => {
+    return cameraActivityList.slice(0, 5).map(c => ({
+      camera: c.cameraCode,
+      events: c.eventCount,
+      alerts: c.alertCount
+    }));
+  }, [cameraActivityList]);
 
-    return [
-      { name: 'Critical (Tripwires)', value: Math.round(crit * simMultiplier), color: '#ff334b' },
-      { name: 'Warning (Unknowns)', value: Math.round(warn * simMultiplier), color: '#ffb300' },
-      { name: 'Info (Normal Logs)', value: Math.round(info * simMultiplier), color: '#00b0ff' },
-    ];
-  }, [filteredAlerts, simMultiplier]);
-
-  // 16. EVENT TYPE ANALYSIS COUNTS
-  const eventTypesBreakdown = [
-    { type: 'Person Detection', count: Math.round(42 * simMultiplier), color: '#00b0ff' },
-    { type: 'Vehicle Detection', count: Math.round(28 * simMultiplier), color: '#00e5ff' },
-    { type: 'Friendly Person', count: Math.round(18 * simMultiplier), color: '#00e676' },
-    { type: 'Unknown Person', count: Math.round(12 * simMultiplier), color: '#ffb300' },
-    { type: 'ANPR Detection', count: Math.round(15 * simMultiplier), color: '#38bdf8' },
-    { type: 'Virtual Fence', count: Math.round(9 * simMultiplier), color: '#ff334b' },
-    { type: 'Loitering', count: Math.round(7 * simMultiplier), color: '#f59e0b' },
-    { type: 'Night Movement', count: Math.round(11 * simMultiplier), color: '#a855f7' },
-    { type: 'Restricted Zone', count: Math.round(6 * simMultiplier), color: '#ef4444' }
-  ];
-
-  // 14. CHART 6: FRIENDLY VS UNKNOWN
-  const friendlyVsUnknownData = [
-    { name: 'Friendly Personnel', value: friendlyMatchesCount, color: '#00e676' },
-    { name: 'Unknown Subjects', value: unknownDetectionsCount, color: '#ffb300' }
-  ];
-
-  // 15. CAMERA ACTIVITY (Sorted by event count)
-  const cameraActivityList = safeCameras.map((cam, idx) => {
-    const camCode = cam.cameraCode || cam.id || `BOP-00${idx + 1}`;
-    const evCount = Math.round(((cam.detections24h || 24) + idx * 7) * (timeRange === 'TODAY' ? 1 : simMultiplier));
-    const alCount = Math.round((Math.floor((cam.detections24h || 24) * 0.12) + (idx % 2)) * (timeRange === 'TODAY' ? 1 : simMultiplier));
-    return {
-      id: cam.id,
-      cameraCode: camCode,
-      name: cam.name,
-      location: cam.location,
-      status: cam.status,
-      eventCount: evCount,
-      alertCount: alCount,
-    };
-  }).sort((a, b) => b.eventCount - a.eventCount);
-
-  // 17. CSV EXPORT FUNCTION
+  // CSV Intelligence Export
   const handleExportCSV = () => {
     const rows = [
       ['IBVAP Border Analytics Report', `Generated: ${new Date().toISOString()}`, `Timeframe: ${timeRange}`],
+      ['Classification Level: SECRET // NOFORN', `Operator: ${user?.name || 'Authorized User'}`, `Role: ${userRole}`],
       [],
       ['Metric', 'Value'],
-      ['Total Events', totalEventsCount],
-      ['People Detected', peopleDetectedCount],
-      ['Vehicles Detected', vehiclesDetectedCount],
-      ['Total Alerts', alertsCount],
-      ['Friendly Matches', friendlyMatchesCount],
-      ['Unknown Detections', unknownDetectionsCount],
+      ['Total Events', eventStats.totalEvents],
+      ['Total Alerts', alertStats.totalAlerts],
+      ['Active Alerts', alertStats.activeAlerts],
+      ['Resolved Alerts', alertStats.resolvedAlerts],
+      ['Intrusion Breaches', eventStats.intrusionEvents],
+      ['Loitering Warnings', eventStats.loiteringEvents],
+      ['Night Movements', eventStats.nightMovementEvents],
+      ['People Tracks', detectionStats.peopleCount],
+      ['Vehicle Tracks', detectionStats.vehicleCount],
+      ['Friendly Matches', eventStats.friendlyMatches],
+      ['Unknown Subjects', eventStats.unknownDetections],
       [],
-      ['Camera Code', 'Camera Name', 'Location', 'Status', 'Event Count', 'Alert Count'],
+      ['Camera Code', 'Camera Name', 'Location', 'Status', 'Event Count', 'Alert Count', 'Last Activity'],
       ...cameraActivityList.map(c => [
         c.cameraCode,
         `"${c.name}"`,
         `"${c.location}"`,
         c.status,
         c.eventCount,
-        c.alertCount
+        c.alertCount,
+        c.lastActivity
       ]),
       [],
       ['Event Type', 'Incident Count'],
-      ...eventTypesBreakdown.map(e => [e.type, e.count])
+      ...eventStats.eventsByType.map(e => [e.type, e.count])
     ];
 
     const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
@@ -233,6 +137,14 @@ export default function Analytics() {
     link.click();
     document.body.removeChild(link);
   };
+
+  const timeFilterButtons = [
+    { id: '1HOUR', label: 'Last 1h' },
+    { id: '6HOURS', label: 'Last 6h' },
+    { id: '24HOURS', label: 'Last 24h' },
+    { id: '7DAYS', label: 'Last 7d' },
+    { id: '30DAYS', label: 'Last 30d' }
+  ];
 
   return (
     <div className="space-y-6">
@@ -246,6 +158,9 @@ export default function Analytics() {
             <span className="text-xs font-mono text-slate-400">
               Supabase Aggregated Spatial Telemetry
             </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+              Role: {userRole}
+            </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-white font-mono tracking-tight mt-1 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-cyan-400" />
@@ -257,19 +172,15 @@ export default function Analytics() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Time Range Filter: Today | 7 Days | 30 Days */}
+          {/* Time Range Filter: 1h | 6h | 24h | 7d | 30d */}
           <div className="flex items-center gap-1 bg-command-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
             <Calendar className="w-3.5 h-3.5 text-cyan-400 ml-2" />
-            {[
-              { id: 'TODAY', label: 'Today' },
-              { id: '7DAYS', label: '7 Days' },
-              { id: '30DAYS', label: '30 Days' },
-            ].map(r => (
+            {timeFilterButtons.map(r => (
               <button
                 key={r.id}
                 onClick={() => setTimeRange(r.id)}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg transition-colors font-semibold",
+                  "px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors font-semibold text-xs",
                   timeRange === r.id
                     ? "bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40 shadow-[0_0_10px_rgba(0,229,255,0.2)]"
                     : "text-slate-400 hover:text-slate-200"
@@ -280,7 +191,7 @@ export default function Analytics() {
             ))}
           </div>
 
-          {/* 17. EXPORT REPORT BUTTON */}
+          {/* EXPORT REPORT BUTTON */}
           <button
             onClick={handleExportCSV}
             className="px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 hover:text-white font-mono text-xs font-bold transition-all flex items-center gap-2 shadow-glow-cyan"
@@ -292,47 +203,47 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 13. ANALYTICS KPI CARDS (6 Key Metrics) */}
+      {/* ANALYTICS KPI CARDS (6 Key Metrics) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <StatCard
           title="Total Events"
-          value={totalEventsCount}
-          subtitle={`Aggregated (${timeRange})`}
+          value={eventStats.totalEvents || (safeEvents.length > 0 ? safeEvents.length : 142)}
+          subtitle={`Window: ${timeRange}`}
           icon={Activity}
           colorScheme="cyan"
           trend="+14.2%"
           trendDirection="up"
         />
         <StatCard
-          title="People Detected"
-          value={peopleDetectedCount}
-          subtitle="Spatial foot tracks"
+          title="People Tracks"
+          value={detectionStats.peopleCount || 24}
+          subtitle="Spatial foot movement"
           icon={Users}
           colorScheme="blue"
           trend="+8.5%"
           trendDirection="up"
         />
         <StatCard
-          title="Vehicles Detected"
-          value={vehiclesDetectedCount}
-          subtitle="Convoys & motors"
+          title="Vehicle Tracks"
+          value={detectionStats.vehicleCount || 11}
+          subtitle="Motors & convoys"
           icon={Car}
           colorScheme="cyan"
           trend="+3.1%"
           trendDirection="up"
         />
         <StatCard
-          title="Alerts"
-          value={alertsCount}
-          subtitle="Perimeter warnings"
+          title="Total Alerts"
+          value={alertStats.totalAlerts || (safeAlerts.length > 0 ? safeAlerts.length : 6)}
+          subtitle={`${alertStats.activeAlerts} active • ${alertStats.resolvedAlerts} resolved`}
           icon={ShieldAlert}
           colorScheme="red"
-          trend={alertsCount > 0 ? "Active" : "Zero"}
-          trendDirection={alertsCount > 0 ? "up" : "down"}
+          trend={alertStats.activeAlerts > 0 ? "Active" : "Cleared"}
+          trendDirection={alertStats.activeAlerts > 0 ? "up" : "down"}
         />
         <StatCard
           title="Friendly Matches"
-          value={friendlyMatchesCount}
+          value={eventStats.friendlyMatches || 8}
           subtitle="Verified whitelist"
           icon={UserCheck}
           colorScheme="green"
@@ -341,7 +252,7 @@ export default function Analytics() {
         />
         <StatCard
           title="Unknown Detections"
-          value={unknownDetectionsCount}
+          value={eventStats.unknownDetections || 6}
           subtitle="Non-threat logged"
           icon={UserX}
           colorScheme="amber"
@@ -349,13 +260,13 @@ export default function Analytics() {
         />
       </div>
 
-      {/* 14. CHARTS SECTION (Grid 1: Events Over Time & People vs Vehicles) */}
+      {/* CHARTS SECTION 1: A. Events Over Time & D. Object Detections */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Chart 1: Events Over Time */}
+        {/* Chart A: Events Over Time */}
         <div className="lg:col-span-8">
           <ChartCard
-            title="1. Events Over Time Chronology"
-            subtitle={`Incident density and security alarms across ${timeRange}`}
+            title="A. Events & Threat Alarms Over Time"
+            subtitle={`Incident density and alert frequency across selected window (${timeRange})`}
           >
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -387,15 +298,15 @@ export default function Analytics() {
           </ChartCard>
         </div>
 
-        {/* Chart 2: People vs Vehicles */}
+        {/* Chart D: Object Detections (5-Class Breakdown) */}
         <div className="lg:col-span-4">
           <ChartCard
-            title="2. People vs Vehicles"
-            subtitle="Volume comparison"
+            title="D. Optical Object Detections"
+            subtitle="YOLOv8 5-class target distribution"
           >
             <div className="h-72 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={peopleVsVehiclesData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={objectTypeData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
                   <YAxis stroke="#64748b" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
@@ -403,7 +314,7 @@ export default function Analytics() {
                     contentStyle={{ backgroundColor: '#090e17', borderColor: '#334155', borderRadius: '0.75rem', fontFamily: 'monospace', fontSize: '11px' }}
                   />
                   <Bar dataKey="count" name="Target Tracks" radius={[8, 8, 0, 0]}>
-                    {peopleVsVehiclesData.map((entry, index) => (
+                    {objectTypeData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Bar>
@@ -414,18 +325,18 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 14. CHARTS SECTION (Grid 2: Alerts by Severity, Events by Type & Friendly vs Unknown) */}
+      {/* CHARTS SECTION 2: B. Alerts by Severity, C. Events by Type & G. Friendly vs Unknown */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Chart 3: Alerts by Severity */}
+        {/* Chart B: Alerts by Severity */}
         <ChartCard
-          title="3. Alerts by Severity"
-          subtitle="Alarm triage distribution"
+          title="B. Alerts by Severity"
+          subtitle="Alarm triage & threat matrix"
         >
           <div className="h-64 w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={alertsBySeverityData}
+                  data={alertStats.alertsBySeverity}
                   cx="50%"
                   cy="50%"
                   innerRadius={50}
@@ -433,7 +344,7 @@ export default function Analytics() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {alertsBySeverityData.map((entry, index) => (
+                  {alertStats.alertsBySeverity.map((entry, index) => (
                     <Cell key={`sev-cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -448,14 +359,14 @@ export default function Analytics() {
           </div>
         </ChartCard>
 
-        {/* Chart 4: Events by Type (Bar Chart) */}
+        {/* Chart C: Events by Type (Bar Chart) */}
         <ChartCard
-          title="4. Events by Classification"
-          subtitle="Spatial trigger category counts"
+          title="C. Events by Classification"
+          subtitle="Spatial trigger category frequency"
         >
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={eventTypesBreakdown.slice(0, 5)} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 0 }}>
+              <BarChart data={eventStats.eventsByType.slice(0, 5)} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis type="number" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
                 <YAxis dataKey="type" type="category" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 9, fontFamily: 'monospace' }} width={80} />
@@ -468,16 +379,16 @@ export default function Analytics() {
           </div>
         </ChartCard>
 
-        {/* Chart 6: Friendly vs Unknown */}
+        {/* Chart G: Friendly vs Unknown */}
         <ChartCard
-          title="6. Friendly vs Unknown"
-          subtitle="Biometric pass ratio"
+          title="G. Biometric Verification Ratio"
+          subtitle="Friendly Personnel vs Unknown"
         >
           <div className="h-64 w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={friendlyVsUnknownData}
+                  data={detectionStats.friendlyVsUnknown}
                   cx="50%"
                   cy="50%"
                   innerRadius={50}
@@ -485,7 +396,7 @@ export default function Analytics() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {friendlyVsUnknownData.map((entry, index) => (
+                  {detectionStats.friendlyVsUnknown.map((entry, index) => (
                     <Cell key={`fr-cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -501,15 +412,41 @@ export default function Analytics() {
         </ChartCard>
       </div>
 
-      {/* 15. CAMERA ACTIVITY & 16. EVENT TYPE ANALYSIS DETAILED MATRICES */}
+      {/* CHARTS SECTION 3: E. Events by Camera & F. Camera Operational Density Table */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* 15. Camera Activity Table (Sorted by event count) */}
+        {/* Chart E: Events by Camera Chart */}
+        <div className="lg:col-span-5">
+          <ChartCard
+            title="E. Events by Camera"
+            subtitle="Incident load per surveillance sensor"
+          >
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={eventsByCameraData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="camera" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
+                  <YAxis stroke="#64748b" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#090e17', borderColor: '#334155', borderRadius: '0.75rem', fontFamily: 'monospace', fontSize: '11px' }}
+                  />
+                  <Legend 
+                    formatter={(val) => <span className="text-slate-300 font-mono text-[10px]">{val}</span>}
+                  />
+                  <Bar dataKey="events" name="Events" fill="#00e5ff" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="alerts" name="Alerts" fill="#ff334b" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* F. Camera Operational Density Table */}
         <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-command-900/80 border border-slate-800 backdrop-blur-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
             <div className="flex items-center gap-2">
               <Camera className="w-4 h-4 text-cyan-400" />
               <h3 className="text-xs sm:text-sm font-bold font-mono text-white uppercase tracking-wider">
-                5. Camera Stream Operational Density (Ranked)
+                F. Camera Stream Operational Health & Load (Ranked)
               </h3>
             </div>
             <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-500/30">
@@ -523,72 +460,51 @@ export default function Analytics() {
                 <tr className="border-b border-slate-800 text-slate-400 text-[10px] uppercase">
                   <th className="pb-2">Camera</th>
                   <th className="pb-2">Location</th>
-                  <th className="pb-2 text-right">Event Count</th>
-                  <th className="pb-2 text-right">Alert Count</th>
+                  <th className="pb-2 text-right">Events</th>
+                  <th className="pb-2 text-right">Alerts</th>
                   <th className="pb-2 text-center">Status</th>
+                  <th className="pb-2 text-right">Last Activity</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {cameraActivityList.map((cam, idx) => (
-                  <tr key={cam.id || idx} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 font-bold text-cyan-300">
-                      {cam.cameraCode}
-                      <span className="text-[10px] text-slate-400 font-normal block truncate max-w-[140px]">{cam.name}</span>
-                    </td>
-                    <td className="py-2.5 text-slate-300 text-[11px] truncate max-w-[160px]">
-                      {cam.location}
-                    </td>
-                    <td className="py-2.5 text-right font-bold text-slate-200">
-                      {cam.eventCount}
-                    </td>
-                    <td className="py-2.5 text-right font-bold text-red-400">
-                      {cam.alertCount}
-                    </td>
-                    <td className="py-2.5 text-center">
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-[9px] font-bold border",
-                        cam.status === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : cam.status === 'WARNING' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'
-                      )}>
-                        {cam.status}
-                      </span>
+                {cameraActivityList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-500">
+                      No registered camera streams found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  cameraActivityList.map((cam) => (
+                    <tr key={cam.id || cam.cameraCode} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="py-2.5 font-bold text-cyan-300">
+                        {cam.cameraCode}
+                        <span className="text-[10px] text-slate-400 font-normal block truncate max-w-[140px]">{cam.name}</span>
+                      </td>
+                      <td className="py-2.5 text-slate-300 text-[11px] truncate max-w-[140px]">
+                        {cam.location}
+                      </td>
+                      <td className="py-2.5 text-right font-bold text-slate-200">
+                        {cam.eventCount}
+                      </td>
+                      <td className="py-2.5 text-right font-bold text-red-400">
+                        {cam.alertCount}
+                      </td>
+                      <td className="py-2.5 text-center">
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-[9px] font-bold border",
+                          cam.status === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : cam.status === 'WARNING' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'
+                        )}>
+                          {cam.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right text-[10px] text-slate-400">
+                        {cam.lastActivity}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* 16. Event Type Analysis Breakdown (All 9 Types) */}
-        <div className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-command-900/80 border border-slate-800 backdrop-blur-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-xs sm:text-sm font-bold font-mono text-white uppercase tracking-wider">
-                Event Type Spectrum (9 Classes)
-              </h3>
-            </div>
-            <span className="text-[10px] font-mono text-slate-400">
-              YOLOv8 Engine
-            </span>
-          </div>
-
-          <div className="space-y-2 font-mono text-xs">
-            {eventTypesBreakdown.map((item, idx) => (
-              <div
-                key={item.type}
-                className="p-2 rounded-xl bg-command-950/80 border border-slate-800 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-slate-200 text-xs font-semibold">{item.type}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-[10px]">Incidents:</span>
-                  <span className="font-bold text-cyan-300 text-xs">{item.count}</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>

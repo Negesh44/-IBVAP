@@ -21,6 +21,7 @@ from face.face_matcher import face_matcher
 from anpr.plate_detector import plate_detector
 from anpr.ocr_engine import ocr_engine
 from events.event_engine import event_engine
+from services.system_monitor import system_monitor
 
 logger = logging.getLogger("ibvap.frame_processor")
 
@@ -69,6 +70,7 @@ class FrameProcessor:
         # -------------------------------------------------------------
         # Step 1: YOLO Object Detection
         # -------------------------------------------------------------
+        t_yolo_start = time.time()
         try:
             raw_detections = detector.detect_frame(pil_img)
         except (FileNotFoundError, Exception) as e:
@@ -81,14 +83,19 @@ class FrameProcessor:
                     "bbox": [180, 140, 260, 320]
                 }
             ]
+        yolo_ms = round((time.time() - t_yolo_start) * 1000.0, 2)
 
         # -------------------------------------------------------------
         # Step 2: ByteTrack Multi-Object Tracking
         # -------------------------------------------------------------
+        t_track_start = time.time()
         tracked_items = tracker_service.update_camera_feed(camera_id, raw_detections)
+        tracking_ms = round((time.time() - t_track_start) * 1000.0, 2)
 
         # Format detection output items
         telemetry_detections: List[Dict[str, Any]] = []
+        face_ms = 0.0
+        anpr_ms = 0.0
 
         for track in tracked_items:
             track_id = int(track.get("track_id", 0) if isinstance(track, dict) else getattr(track, "track_id", 0))
@@ -106,6 +113,7 @@ class FrameProcessor:
             # Step 3: Biometric Face Recognition (for detected persons)
             # -------------------------------------------------------------
             if enable_face_rec and object_type == "person" and (x2 - x1) > 20 and (y2 - y1) > 20:
+                t_f = time.time()
                 try:
                     person_crop = pil_img.crop((x1, y1, x2, y2))
                     faces = face_detector.detect_faces(person_crop)
@@ -118,11 +126,13 @@ class FrameProcessor:
                             friendly = True
                 except Exception as e:
                     logger.debug(f"[{camera_id}] Face matching bypassed: {e}")
+                face_ms += (time.time() - t_f) * 1000.0
 
             # -------------------------------------------------------------
             # Step 4: ANPR License Plate Extraction (for vehicles)
             # -------------------------------------------------------------
             if enable_anpr and object_type in ("car", "truck", "bus", "motorcycle") and (x2 - x1) > 30:
+                t_a = time.time()
                 try:
                     vehicle_crop = pil_img.crop((x1, y1, x2, y2))
                     plate_res = plate_detector.detect_plate(vehicle_crop)
@@ -132,6 +142,7 @@ class FrameProcessor:
                             identity = ocr_res["plate_text"]
                 except Exception as e:
                     logger.debug(f"[{camera_id}] ANPR bypassed: {e}")
+                anpr_ms += (time.time() - t_a) * 1000.0
 
             item = {
                 "track_id": track_id,
@@ -146,6 +157,7 @@ class FrameProcessor:
         # -------------------------------------------------------------
         # Step 5: Event Detection Engine
         # -------------------------------------------------------------
+        t_evt_start = time.time()
         if brightness is None:
             gray_arr = np.array(pil_img.convert("L"), dtype=np.float32)
             brightness = float(np.mean(gray_arr))
@@ -159,8 +171,19 @@ class FrameProcessor:
             brightness=brightness,
             persist_to_db=True
         )
+        event_ms = round((time.time() - t_evt_start) * 1000.0, 2)
 
         processing_time_ms = round((time.time() - t_start) * 1000.0, 2)
+
+        # Record metrics in system monitor
+        system_monitor.record_frame_latency(
+            yolo_ms=yolo_ms,
+            tracking_ms=tracking_ms,
+            face_ms=round(face_ms, 2),
+            anpr_ms=round(anpr_ms, 2),
+            event_ms=event_ms,
+            total_ms=processing_time_ms
+        )
 
         # -------------------------------------------------------------
         # Step 6: Telemetry Packaging (Metadata Only for WebSocket)

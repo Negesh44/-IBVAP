@@ -65,6 +65,39 @@ export interface BackendHealth {
   timestamp: string;
 }
 
+export interface SystemHealth {
+  status: string;
+  uptime_seconds: number;
+  cpu_percent: number;
+  memory_percent: number;
+  gpu_available: boolean;
+  gpu_name: string;
+  gpu_memory_used_mb: number;
+  gpu_memory_total_mb: number;
+  gpu_utilization_percent?: number;
+  gpu_temperature_c?: number | null;
+  active_cameras: number;
+  processing_fps: number;
+  average_inference_ms: number;
+}
+
+export interface SystemMetrics {
+  health: SystemHealth;
+  frames_processed: number;
+  frames_skipped: number;
+  current_fps: number;
+  latency_ms: {
+    average_yolo_inference_ms: number;
+    average_tracking_ms: number;
+    average_face_rec_ms: number;
+    average_anpr_ms: number;
+    average_event_engine_ms: number;
+    average_total_ms: number;
+  };
+  active_cameras_count: number;
+  cameras: CameraStatus[];
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   try {
@@ -150,6 +183,14 @@ export const api = {
 
   getStreamHealth: async (): Promise<StreamHealth> => {
     return request<StreamHealth>('/api/streams/health');
+  },
+
+  getSystemHealth: async (): Promise<SystemHealth> => {
+    return request<SystemHealth>('/api/system/health');
+  },
+
+  getSystemMetrics: async (): Promise<SystemMetrics> => {
+    return request<SystemMetrics>('/api/system/metrics');
   },
 
   startStream: async (cameraId: string, rtspUrl?: string): Promise<{ status: string; camera_id: string; message: string }> => {

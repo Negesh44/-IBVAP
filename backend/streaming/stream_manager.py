@@ -194,6 +194,8 @@ class StreamManager:
             "cameras": self.get_all_statuses()
         }
 
+    get_fleet_health = get_health
+
     def stop_all(self):
         """
         Halt all active camera workers during application shutdown.
