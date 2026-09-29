@@ -1,8 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, status, Depends
 from typing import List, Optional
 from models.schemas import DetectionItem, DetectImageResponse
 from services.detection_service import detection_service
 from services.inference_service import inference_service
+from auth.dependencies import get_current_user, CurrentUser
+from utils.security_validation import validate_image_upload
 
 router = APIRouter(prefix="/api", tags=["Detections & Inference"])
 
@@ -10,11 +12,11 @@ router = APIRouter(prefix="/api", tags=["Detections & Inference"])
 @router.get("/detections", response_model=List[DetectionItem], summary="Get live/recent object detections")
 async def get_detections(
     camera_id: Optional[str] = Query(None, description="Filter by camera code e.g. BOP-001"),
-    count: int = Query(4, ge=1, le=20, description="Number of recent detection frames")
+    count: int = Query(4, ge=1, le=20, description="Number of recent detection frames"),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Returns latest tracked object detections across cameras.
-    Emits data matching the exact schema required for frontend rendering.
+    Returns latest tracked object detections across cameras for authenticated operators.
     """
     results = [detection_service.generate_simulated_detection(camera_id) for _ in range(count)]
     return results
@@ -23,57 +25,25 @@ async def get_detections(
 @router.post("/detect", response_model=DetectImageResponse, summary="Run YOLO inference on uploaded image")
 async def detect_image(
     file: UploadFile = File(..., description="Image file (JPEG, PNG, WEBP) to run object detection on"),
-    confidence: Optional[float] = Query(None, ge=0.05, le=0.99, description="Confidence threshold (defaults to YOLO_CONFIDENCE env var e.g. 0.40)")
+    confidence: Optional[float] = Query(None, ge=0.05, le=0.99, description="Confidence threshold (0.05 to 0.99)"),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Executes YOLO deep learning model inference on the uploaded image.
-    
-    Target classes supported:
-    - 0 = person
-    - 1 = car
-    - 2 = truck
-    - 3 = bus
-    - 4 = motorcycle
-    
-    Returns bounding box coordinates, detected classes, confidence scores, and latency telemetry.
+    Validates file MIME type, size limit, and prevents malicious binaries.
     """
-    if not file.content_type or not file.content_type.startswith("image/"):
-        # Check filename extension if content-type header is generic
-        allowed_exts = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
-        if not file.filename or not file.filename.lower().endswith(allowed_exts):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Uploaded file must be a valid image format (JPEG, PNG, WEBP, BMP)."
-            )
+    image_bytes = await file.read()
+    validate_image_upload(image_bytes, filename=file.filename, content_type=file.content_type, max_size_mb=10)
 
     try:
-        image_bytes = await file.read()
-        if len(image_bytes) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Empty image payload received."
-            )
-        
         result = inference_service.process_image(image_bytes, conf_threshold=confidence)
         return result
-
     except ValueError as ve:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Image processing error: {ve}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Image processing error: {ve}")
     except FileNotFoundError as fnf:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"YOLO Model Error: {fnf}. Please ensure YOLO_MODEL_PATH is set in backend/.env to a valid .pt weights file."
-        )
-    except RuntimeError as re:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Inference execution failed: {re}"
+            detail=f"YOLO Model Error: {fnf}."
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error during detection: {e}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Detection error: {e}")

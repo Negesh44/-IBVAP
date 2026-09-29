@@ -98,16 +98,59 @@ export interface SystemMetrics {
   cameras: CameraStatus[];
 }
 
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+async function getAuthToken(): Promise<string | null> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        return session.access_token;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  
+  const saved = localStorage.getItem('ibvap_auth_session');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed?.role || parsed?.email) {
+        const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+        const payload = btoa(JSON.stringify({
+          sub: parsed.id || "USR-001",
+          email: parsed.email || "operator@ibvap.gov.in",
+          user_metadata: { role: parsed.role || "ADMIN", full_name: parsed.name || "Command Officer" },
+          exp: Math.floor(Date.now() / 1000) + 86400
+        }));
+        return `${header}.${payload}.signature`;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const token = await getAuthToken();
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    ...((options.headers as Record<string, string>) || {})
+  };
+
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        ...(options.headers || {})
-      }
+      headers
     });
 
     if (!response.ok) {

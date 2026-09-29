@@ -1,7 +1,7 @@
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -312,8 +312,9 @@ class SupabaseService:
         """
         Appends an entry to the tamper-evident audit_logs table.
         """
+        now_dt = datetime.now(timezone.utc)
         log_entry = {
-            "id": f"LOG-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "id": f"LOG-{now_dt.strftime('%Y%m%d%H%M%S')}",
             "action": action,
             "category": category,
             "record_id": record_id,
@@ -321,7 +322,7 @@ class SupabaseService:
             "user_name": user_name,
             "user_role": user_role,
             "ip_address": "127.0.0.1",
-            "created_at": datetime.utcnow().isoformat() + "Z"
+            "created_at": now_dt.isoformat()
         }
 
         if self.is_connected and self.client:

@@ -12,6 +12,19 @@ from fastapi.testclient import TestClient
 from main import app
 
 
+import jwt
+import time
+
+def get_auth_token():
+    payload = {
+        "sub": "USR-TEST-MONITOR",
+        "email": "monitor@ibvap.gov.in",
+        "user_metadata": {"role": "ADMIN", "full_name": "System Monitor Admin"},
+        "exp": int(time.time()) + 3600
+    }
+    return jwt.encode(payload, "secure_32_byte_secret_key_for_testing_purposes!", algorithm="HS256")
+
+
 class TestSystemHealthAndMetrics(unittest.TestCase):
     """
     Test suite for IBVAP System Health, Hardware Telemetry, Performance Metrics, and Graceful Fallbacks.
@@ -20,10 +33,14 @@ class TestSystemHealthAndMetrics(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app)
+        cls.token = get_auth_token()
 
     def test_01_system_health_endpoint(self):
         """Tests GET /api/system/health returns correct schema and real values."""
-        response = self.client.get("/api/system/health")
+        response = self.client.get(
+            "/api/system/health",
+            headers={"Authorization": f"Bearer {self.token}"}
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
 
@@ -58,7 +75,10 @@ class TestSystemHealthAndMetrics(unittest.TestCase):
             total_ms=44.5
         )
 
-        response = self.client.get("/api/system/metrics")
+        response = self.client.get(
+            "/api/system/metrics",
+            headers={"Authorization": f"Bearer {self.token}"}
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
 

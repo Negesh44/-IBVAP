@@ -273,8 +273,16 @@ export default function AlertDetailModal({
                 </div>
               )}
 
+              {/* VIEWER Read-Only Warning */}
+              {user?.role === 'VIEWER' && (
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-300 font-mono text-xs flex items-center gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-[11px]">Read-Only Mode: Alert status actions are restricted for the VIEWER role.</span>
+                </div>
+              )}
+
               {/* Tactical Response Unit Dispatch */}
-              {!isResolved && (
+              {user?.role !== 'VIEWER' && !isResolved && (
                 <div>
                   <label className="text-slate-400 block mb-1 text-[11px]">
                     Assigned Tactical Unit
@@ -293,7 +301,7 @@ export default function AlertDetailModal({
               )}
 
               {/* Operator Note Input */}
-              {!isResolved && (
+              {user?.role !== 'VIEWER' && !isResolved && (
                 <div>
                   <label className="text-slate-400 block mb-1 text-[11px]">
                     Operational Action Note
@@ -310,36 +318,38 @@ export default function AlertDetailModal({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-2">
-              {!isAcknowledged && !isResolved && (
-                <button
-                  disabled={isUpdating}
-                  onClick={handleAcknowledge}
-                  className="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                >
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  Acknowledge
-                </button>
-              )}
+            {user?.role !== 'VIEWER' && (
+              <div className="flex items-center gap-3 pt-2">
+                {!isAcknowledged && !isResolved && (
+                  <button
+                    disabled={isUpdating}
+                    onClick={handleAcknowledge}
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    Acknowledge
+                  </button>
+                )}
 
-              {!isResolved && (
-                <button
-                  disabled={isUpdating}
-                  onClick={handleResolve}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-glow-green"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Resolve Threat
-                </button>
-              )}
+                {!isResolved && (
+                  <button
+                    disabled={isUpdating}
+                    onClick={handleResolve}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-glow-green"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    Resolve Threat
+                  </button>
+                )}
 
-              {isResolved && (
-                <div className="w-full py-2.5 text-center text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Alert Resolved & Archived
-                </div>
-              )}
-            </div>
+                {isResolved && (
+                  <div className="w-full py-2.5 text-center text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Alert Resolved & Archived
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Modal>

@@ -23,9 +23,19 @@ dist-ssr
 *.sln
 *.sw?
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.pt
+
 # Environment variables
 .env
 .env.production
+.env.local
+.env.*.local
+!.env.example
+!backend/.env.example
 
 .vercel
-.env*

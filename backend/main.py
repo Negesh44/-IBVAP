@@ -29,6 +29,8 @@ from api.face import router as face_router
 from api.streams import router as streams_router
 from api.evidence import router as evidence_router
 from api.system import router as system_router
+from api.users import router as users_router
+from api.audit import router as audit_router
 
 # Logging Configuration
 logging.basicConfig(
@@ -91,15 +93,34 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Setup
-cors_origins_env = os.getenv("CORS_ORIGINS", "*")
-origins = [o.strip() for o in cors_origins_env.split(",")] if cors_origins_env != "*" else ["*"]
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+# Hardened CORS Configuration (Development Localhost + Configured Origins)
+cors_origins_env = os.getenv("CORS_ORIGINS", "").strip()
+if cors_origins_env and cors_origins_env != "*":
+    origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+else:
+    # Explicit localhost origins for dev
+    origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -114,6 +135,8 @@ app.include_router(face_router)
 app.include_router(streams_router)
 app.include_router(evidence_router)
 app.include_router(system_router)
+app.include_router(users_router)
+app.include_router(audit_router)
 
 
 # -------------------------------------------------------------

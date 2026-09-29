@@ -52,19 +52,19 @@ export default function Sidebar({ isOpen, onClose }) {
       path: '/alerts', 
       icon: ShieldAlert, 
       badge: unreadAlertsCount > 0 ? unreadAlertsCount : null,
-      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
     },
     { 
       name: 'Cameras', 
       path: '/cameras', 
       icon: Camera,
-      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
     },
     { 
       name: 'Friendly Persons', 
       path: '/friendly-persons', 
       icon: UserCheck,
-      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR']
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
     },
     { 
       name: 'Events', 
@@ -76,7 +76,7 @@ export default function Sidebar({ isOpen, onClose }) {
       name: 'Analytics', 
       path: '/analytics', 
       icon: BarChart3,
-      allowedRoles: ['ADMIN', 'COMMANDER', 'VIEWER'] // Operator cannot view analytics
+      allowedRoles: ['ADMIN', 'COMMANDER', 'OPERATOR', 'VIEWER']
     },
     { 
       name: 'Users', 
@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen, onClose }) {
       name: 'Audit Logs', 
       path: '/audit-logs', 
       icon: ScrollText,
-      allowedRoles: ['ADMIN']
+      allowedRoles: ['ADMIN', 'COMMANDER']
     },
     { 
       name: 'Settings', 

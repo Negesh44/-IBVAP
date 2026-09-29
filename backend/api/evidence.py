@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status, Header
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import Optional, Dict, Any
 from services.supabase_service import supabase_service
+from auth.dependencies import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/api/evidence", tags=["Evidence & Forensics"])
 
@@ -8,7 +9,7 @@ router = APIRouter(prefix="/api/evidence", tags=["Evidence & Forensics"])
 @router.get("/{event_id}", summary="Retrieve evidence access details and signed URL for a security incident")
 async def get_incident_evidence(
     event_id: str,
-    authorization: Optional[str] = Header(None, description="Optional Bearer token for role authorization")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Returns signed evidence URL and incident metadata for verified operators.
