@@ -181,17 +181,21 @@ export const auditLogsService = {
     return getLocalAuditLogs();
   },
 
-  async log(action, resource, user = 'Commander Rawat', userRole = 'ADMIN', status = 'SUCCESS') {
+  async log(action, resourceType = 'ALERT', resourceId = '', details = '', user = 'Commander Rawat', userRole = 'ADMIN', userId = null) {
     const newLog = {
       id: `LOG-${Math.floor(5500 + Math.random() * 4400)}`,
-      user_name: user,
-      user_role: userRole,
       action: action,
       action_code: action.toUpperCase().replace(/\s+/g, '_'),
-      resource: resource,
+      resource_type: resourceType,
+      resource_id: resourceId,
+      resource: resourceId ? `${resourceType}: ${resourceId}` : resourceType,
+      details: details || `${action} on ${resourceType} ${resourceId}`,
+      user_name: user,
+      user_role: userRole,
+      user_id: userId,
       ip_address: '10.240.12.88',
-      device: 'Tactical Workstation (IBVAP Web GUI)',
-      status: status,
+      device: 'Tactical Command Workstation (IBVAP Web GUI)',
+      status: 'SUCCESS',
       created_at: new Date().toISOString()
     };
 
@@ -210,6 +214,8 @@ export const auditLogsService = {
       user: newLog.user_name,
       userRole: newLog.user_role,
       actionCode: newLog.action_code,
+      resourceType: newLog.resource_type,
+      resourceId: newLog.resource_id,
       ipAddress: newLog.ip_address
     };
     saveLocalAuditLogs([formatted, ...list]);

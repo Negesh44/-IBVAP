@@ -73,6 +73,10 @@ export default function Dashboard() {
   const offlineCameras = safeCameras.filter(c => c?.status === 'OFFLINE').length;
 
   const activeAlertsCount = safeAlerts.filter(a => a?.status === 'ACTIVE').length;
+  const criticalAlertsCount = safeAlerts.filter(a => a?.severity === 'CRITICAL' && a?.status === 'ACTIVE').length;
+  const warningAlertsCount = safeAlerts.filter(a => a?.severity === 'WARNING' && a?.status === 'ACTIVE').length;
+  const resolvedTodayCount = safeAlerts.filter(a => a?.status === 'RESOLVED').length;
+
   const recentAlerts = safeAlerts.slice(0, 4);
   const recentEvents = safeEvents.slice(0, 5);
 
@@ -117,6 +121,53 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* 7. DASHBOARD ALERT TELEMETRY BANNER */}
+      <div className="p-3.5 rounded-2xl bg-command-900/90 border border-slate-800 backdrop-blur-xl grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+        <div 
+          onClick={() => navigate('/alerts')}
+          className="p-3 rounded-xl bg-command-950 border border-red-500/30 hover:border-red-500/60 transition-colors cursor-pointer flex items-center justify-between"
+        >
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase block font-bold">Active Alerts</span>
+            <span className="text-lg font-bold text-red-400">{activeAlertsCount}</span>
+          </div>
+          <ShieldAlert className="w-5 h-5 text-red-400 animate-pulse" />
+        </div>
+
+        <div 
+          onClick={() => navigate('/alerts')}
+          className="p-3 rounded-xl bg-command-950 border border-red-900/40 hover:border-red-500/40 transition-colors cursor-pointer flex items-center justify-between"
+        >
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase block font-bold">Critical Alerts</span>
+            <span className="text-lg font-bold text-red-400">{criticalAlertsCount}</span>
+          </div>
+          <Flame className="w-5 h-5 text-red-500" />
+        </div>
+
+        <div 
+          onClick={() => navigate('/alerts')}
+          className="p-3 rounded-xl bg-command-950 border border-amber-500/30 hover:border-amber-500/60 transition-colors cursor-pointer flex items-center justify-between"
+        >
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase block font-bold">Warnings</span>
+            <span className="text-lg font-bold text-amber-400">{warningAlertsCount}</span>
+          </div>
+          <AlertTriangle className="w-5 h-5 text-amber-400" />
+        </div>
+
+        <div 
+          onClick={() => navigate('/alerts')}
+          className="p-3 rounded-xl bg-command-950 border border-emerald-500/30 hover:border-emerald-500/60 transition-colors cursor-pointer flex items-center justify-between"
+        >
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase block font-bold">Resolved Today</span>
+            <span className="text-lg font-bold text-emerald-400">{resolvedTodayCount}</span>
+          </div>
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+        </div>
+      </div>
+
       {/* 6 Top Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <StatCard
@@ -152,10 +203,10 @@ export default function Dashboard() {
         <StatCard
           title="Active Alerts"
           value={activeAlertsCount}
-          subtitle="Threat queue"
+          subtitle={`${criticalAlertsCount} crit • ${warningAlertsCount} warn`}
           icon={ShieldAlert}
           colorScheme="red"
-          trend={activeAlertsCount > 0 ? "High" : "Zero"}
+          trend={activeAlertsCount > 0 ? "Active" : "Cleared"}
           trendDirection={activeAlertsCount > 0 ? "up" : "down"}
           onClick={() => navigate('/alerts')}
         />
@@ -171,7 +222,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="Events Today"
-          value={events.length || stats.eventsToday}
+          value={safeEvents.length || stats.eventsToday}
           subtitle="Database logged"
           icon={CalendarDays}
           colorScheme="amber"

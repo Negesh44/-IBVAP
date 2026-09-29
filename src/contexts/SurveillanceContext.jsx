@@ -264,24 +264,113 @@ export function SurveillanceProvider({ children }) {
     });
 
     playAlertSound();
-    await auditLogsService.log('AI Alarm Triggered', `${pick.type} detected at ${randomCam.name}`, 'AI Engine', 'SYSTEM');
+    await auditLogsService.log('AI Alarm Triggered', 'ALERT', newAlert.id, `${pick.type} detected at ${randomCam.name}`, 'AI Engine', 'SYSTEM');
   }, [cameras, playAlertSound]);
 
-  const acknowledgeAlert = async (alertId, actionNote = 'Acknowledged by operator') => {
-    const updated = await alertsService.updateStatus(alertId, 'IN_REVIEW', actionNote);
+  // Supabase Realtime Subscriptions for alerts & events
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const channel = supabase
+        .channel('realtime-alerts-events')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'alerts' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              const newAlert = alertsService.getById ? payload.new : payload.new;
+              const formatted = {
+                id: payload.new.id,
+                type: payload.new.alert_type || payload.new.type || 'Security Alert',
+                alertType: payload.new.alert_type || payload.new.type || 'Security Alert',
+                severity: (payload.new.severity || 'WARNING').toUpperCase(),
+                camera: payload.new.camera_name || payload.new.camera_id || 'BOP-001',
+                cameraId: payload.new.camera_id || 'BOP-001',
+                location: payload.new.location || 'Perimeter',
+                description: payload.new.description || 'Intrusion signal',
+                status: (payload.new.status || 'ACTIVE').toUpperCase(),
+                evidenceUrl: payload.new.evidence_url || null,
+                detectedAt: payload.new.detected_at || payload.new.created_at || new Date().toISOString(),
+                createdAt: payload.new.created_at || new Date().toISOString(),
+                confidence: payload.new.confidence || '94%'
+              };
+              setAlerts(prev => [formatted, ...prev.filter(a => a.id !== formatted.id)]);
+              setUnreadAlertsCount(prev => prev + 1);
+              setRecentNotification({
+                id: formatted.id,
+                title: `${formatted.severity === 'CRITICAL' ? 'CRITICAL ALERT' : 'SECURITY ALERT'}: ${formatted.type}`,
+                message: `${formatted.camera} — ${formatted.location}`,
+                timestamp: new Date().toISOString(),
+                severity: formatted.severity,
+              });
+              playAlertSound();
+            } else if (payload.eventType === 'UPDATE') {
+              setAlerts(prev => prev.map(a => a.id === payload.new.id ? {
+                ...a,
+                status: (payload.new.status || a.status).toUpperCase(),
+                actionTaken: payload.new.action_taken || a.actionTaken
+              } : a));
+            } else if (payload.eventType === 'DELETE') {
+              setAlerts(prev => prev.filter(a => a.id !== payload.old.id));
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'events' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              const newEvt = {
+                id: payload.new.id,
+                eventType: payload.new.event_type || 'Perimeter Event',
+                camera: payload.new.camera_name || payload.new.camera_id || 'BOP-001',
+                cameraId: payload.new.camera_id || 'BOP-001',
+                personId: payload.new.person_id || null,
+                objectType: payload.new.object_type || 'PERSON',
+                targetType: payload.new.object_type || 'PERSON',
+                objectId: payload.new.object_id || 'OBJ-01',
+                targetId: payload.new.object_id || 'OBJ-01',
+                confidence: payload.new.confidence || '95%',
+                location: payload.new.location || 'Perimeter',
+                evidenceUrl: payload.new.evidence_url || null,
+                metadata: payload.new.metadata || {},
+                detectedAt: payload.new.detected_at || payload.new.created_at || new Date().toISOString(),
+                createdAt: payload.new.created_at || new Date().toISOString(),
+                severity: (payload.new.severity || 'INFO').toUpperCase(),
+                status: (payload.new.status || 'VERIFIED').toUpperCase()
+              };
+              setEvents(prev => [newEvt, ...prev.filter(e => e.id !== newEvt.id)]);
+            } else if (payload.eventType === 'UPDATE') {
+              setEvents(prev => prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Realtime subscription error:', err);
+    }
+  }, [playAlertSound]);
+
+  const acknowledgeAlert = async (alertId, actionNote = 'Acknowledged by operator', user = 'Commander Rawat', userRole = 'ADMIN', userId = null) => {
+    const updated = await alertsService.updateStatus(alertId, 'ACKNOWLEDGED', actionNote);
     if (updated) {
       setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
     }
-    await auditLogsService.log('Alert Acknowledged', `Alert ID #${alertId} set to In Review`, 'Commander', 'COMMANDER');
+    await auditLogsService.log('Alert Acknowledged', 'ALERT', alertId, actionNote || 'Status set to ACKNOWLEDGED', user, userRole, userId);
   };
 
-  const resolveAlert = async (alertId, resolutionNote = 'Threat verified & cleared') => {
+  const resolveAlert = async (alertId, resolutionNote = 'Threat verified & cleared', user = 'Commander Rawat', userRole = 'ADMIN', userId = null) => {
     const updated = await alertsService.updateStatus(alertId, 'RESOLVED', resolutionNote);
     if (updated) {
       setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
       setUnreadAlertsCount(prev => Math.max(0, prev - 1));
     }
-    await auditLogsService.log('Alert Resolved', `Alert ID #${alertId} marked as RESOLVED`, 'Commander', 'COMMANDER');
+    await auditLogsService.log('Alert Resolved', 'ALERT', alertId, resolutionNote || 'Status set to RESOLVED', user, userRole, userId);
   };
 
   const clearNotification = () => setRecentNotification(null);
