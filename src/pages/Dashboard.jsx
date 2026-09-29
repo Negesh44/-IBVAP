@@ -19,7 +19,8 @@ import {
   TrendingUp,
   Flame,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Server
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -40,7 +41,7 @@ import SurveillanceFeed from '../components/surveillance/SurveillanceFeed';
 import AlertDetailModal from '../components/alerts/AlertDetailModal';
 import CameraControlModal from '../components/surveillance/CameraControlModal';
 import { useSurveillance } from '../contexts/SurveillanceContext';
-import { MOCK_ANALYTICS, MOCK_SYSTEM_METRICS } from '../data/mockData';
+import { MOCK_ANALYTICS } from '../data/mockData';
 import { formatRelativeTime, formatTacticalTime } from '../utils/formatters';
 
 export default function Dashboard() {
@@ -49,6 +50,8 @@ export default function Dashboard() {
     cameras, 
     alerts, 
     events, 
+    friendlyPersons,
+    stats,
     selectedCamera, 
     setSelectedCamera,
     acknowledgeAlert,
@@ -59,7 +62,12 @@ export default function Dashboard() {
   const [activeAlertDetail, setActiveAlertDetail] = useState(null);
   const [activeCameraModal, setActiveCameraModal] = useState(null);
 
-  const activeCamerasCount = cameras.filter(c => c.status === 'ONLINE').length;
+  // Dynamic Camera Statistics from Supabase
+  const totalCameras = cameras.length || 6;
+  const onlineCameras = cameras.filter(c => c.status === 'ONLINE').length;
+  const warningCameras = cameras.filter(c => c.status === 'WARNING').length;
+  const offlineCameras = cameras.filter(c => c.status === 'OFFLINE').length;
+
   const activeAlertsCount = alerts.filter(a => a.status === 'ACTIVE').length;
   const recentAlerts = alerts.slice(0, 4);
   const recentEvents = events.slice(0, 5);
@@ -76,7 +84,7 @@ export default function Dashboard() {
               ALL SECTORS MONITORED
             </span>
             <span className="text-xs font-mono text-slate-400">
-              Frontier Grid Alpha-Echo
+              Frontier Grid Alpha-Echo • Supabase Connected
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-white font-mono tracking-tight mt-1">
@@ -109,18 +117,18 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <StatCard
           title="Active Cameras"
-          value={`${activeCamerasCount}/${cameras.length}`}
-          subtitle={`${cameras.length - activeCamerasCount} offline/maintenance`}
+          value={`${onlineCameras}/${totalCameras}`}
+          subtitle={`${warningCameras} warn • ${offlineCameras} off`}
           icon={Camera}
           colorScheme="cyan"
-          trend="99.2%"
+          trend={`${((onlineCameras / totalCameras) * 100).toFixed(0)}%`}
           trendDirection="up"
           onClick={() => navigate('/cameras')}
         />
         <StatCard
           title="People Detected"
-          value={MOCK_SYSTEM_METRICS.peopleDetectedToday}
-          subtitle="142 friendly verified"
+          value={stats.peopleDetectedToday}
+          subtitle="Realtime tracked"
           icon={Users}
           colorScheme="green"
           trend="+12%"
@@ -129,8 +137,8 @@ export default function Dashboard() {
         />
         <StatCard
           title="Vehicles"
-          value={MOCK_SYSTEM_METRICS.vehiclesDetectedToday}
-          subtitle="68 registered convoy"
+          value={stats.vehiclesDetectedToday}
+          subtitle="Registered convoys"
           icon={Car}
           colorScheme="blue"
           trend="+4%"
@@ -140,7 +148,7 @@ export default function Dashboard() {
         <StatCard
           title="Active Alerts"
           value={activeAlertsCount}
-          subtitle="2 critical requires QRT"
+          subtitle="Threat queue"
           icon={ShieldAlert}
           colorScheme="red"
           trend={activeAlertsCount > 0 ? "High" : "Zero"}
@@ -149,8 +157,8 @@ export default function Dashboard() {
         />
         <StatCard
           title="Friendly Persons"
-          value={MOCK_SYSTEM_METRICS.friendlyPersonsRegistered}
-          subtitle="Face embeddings active"
+          value={friendlyPersons.length || stats.friendlyPersonsRegistered}
+          subtitle="Biometric whitelist"
           icon={UserCheck}
           colorScheme="green"
           trend="100%"
@@ -159,8 +167,8 @@ export default function Dashboard() {
         />
         <StatCard
           title="Events Today"
-          value={MOCK_SYSTEM_METRICS.eventsToday}
-          subtitle="Processed in realtime"
+          value={events.length || stats.eventsToday}
+          subtitle="Database logged"
           icon={CalendarDays}
           colorScheme="amber"
           trend="+18%"
@@ -178,7 +186,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
                 <h3 className="text-sm font-bold font-mono text-slate-100 uppercase tracking-wider">
-                  Live Stream Priority Focus — {primaryCamera?.id}
+                  Live Stream Priority Focus — {primaryCamera?.cameraCode || primaryCamera?.id}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -217,10 +225,13 @@ export default function Dashboard() {
                         : 'bg-command-950 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <div className="text-[10px] font-bold truncate">{cam.id}</div>
+                    <div className="text-[10px] font-bold truncate">{cam.cameraCode || cam.id}</div>
                     <div className="text-[9px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${cam.status === 'ONLINE' ? 'bg-emerald-400' : 'bg-red-500'}`} />
-                      <span className="truncate">{cam.sector}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        cam.status === 'ONLINE' ? 'bg-emerald-400' :
+                        cam.status === 'WARNING' ? 'bg-amber-400' : 'bg-red-500'
+                      }`} />
+                      <span className="truncate">{cam.sector || 'North'}</span>
                     </div>
                   </button>
                 );
@@ -357,7 +368,6 @@ export default function Dashboard() {
             <div className="space-y-4 flex-1">
               {recentEvents.map((evt, idx) => (
                 <div key={evt.id || idx} className="flex items-start gap-3 relative">
-                  {/* Vertical timeline connector */}
                   {idx < recentEvents.length - 1 && (
                     <div className="absolute left-2.5 top-6 bottom-0 w-0.5 bg-slate-800" />
                   )}
