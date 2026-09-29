@@ -1,0 +1,33 @@
+# Version Control & Environment
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Python Caches & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.pytest_cache/
+
+# Model weights (Mounted dynamically via Docker volume)
+models/*.pt
+weights/*.pt
+*.pt
+*.onnx
+*.engine
+
+# Evidence & Logs
+evidence/*
+*.log
+logs/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

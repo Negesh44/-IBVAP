@@ -45,7 +45,7 @@ class ModelLoader:
         """
         Retrieves the model path from YOLO_MODEL_PATH environment variable.
         """
-        model_path = os.getenv("YOLO_MODEL_PATH", "weights/best.pt")
+        model_path = os.getenv("YOLO_MODEL_PATH", "models/best.pt")
         return model_path
 
     def load_model(self) -> Any:
@@ -58,22 +58,33 @@ class ModelLoader:
         model_path = self.get_model_path()
         device = self.get_device()
 
-        # Check if file exists
+        # Check if file exists or search candidate locations
         path_obj = Path(model_path)
         if not path_obj.is_file():
-            # If path doesn't exist, check default fallback or standard yolov8n.pt
-            fallback_path = Path("weights/yolov8n.pt")
-            if fallback_path.is_file():
-                model_path = str(fallback_path)
-                logger.warning(f"Specified model '{path_obj}' not found. Falling back to '{model_path}'")
-            else:
+            candidates = [
+                Path("models/best.pt"),
+                Path("/app/models/best.pt"),
+                Path("backend/models/best.pt"),
+                Path("weights/best.pt"),
+                Path("weights/yolov8n.pt"),
+                Path("yolov8n.pt")
+            ]
+            found = False
+            for cand in candidates:
+                if cand.is_file():
+                    model_path = str(cand)
+                    logger.info(f"YOLO model resolved from candidate path: '{model_path}'")
+                    found = True
+                    break
+
+            if not found:
                 logger.warning(
-                    f"YOLO model weights file '{model_path}' not found on disk. "
-                    "Please set YOLO_MODEL_PATH in .env to a valid .pt weights file."
+                    f"YOLO model weights file '{path_obj}' not found on disk. "
+                    "Please mount or place best.pt in /app/models/ or configure YOLO_MODEL_PATH."
                 )
                 raise FileNotFoundError(
                     f"Model weights file not found at '{model_path}'. "
-                    "Ensure YOLO_MODEL_PATH is configured in backend/.env."
+                    "Ensure YOLO_MODEL_PATH is configured and mounted."
                 )
 
         try:
@@ -81,7 +92,7 @@ class ModelLoader:
             logger.info(f"Loading YOLO model from '{model_path}' on device '{device}'...")
             self._model = YOLO(model_path)
             self._is_loaded = True
-            logger.info("YOLO model loaded successfully into memory.")
+            logger.info(f"YOLO model loaded successfully into memory on device [{device}].")
             return self._model
         except ImportError:
             logger.error("The 'ultralytics' library is not installed. Run 'pip install ultralytics'.")

@@ -1,0 +1,28 @@
+# Frontend & Node
+node_modules/
+dist/
+dist-ssr/
+src/
+public/
+
+# Version Control & Environment
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# Python Caches & Virtual Environments
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+venv/
+.venv/
+backend/venv/
+
+# Model weights & evidence (Mounted via Docker volume)
+backend/models/*.pt
+backend/weights/*.pt
+backend/evidence/*
+*.log

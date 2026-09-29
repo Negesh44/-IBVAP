@@ -10,7 +10,7 @@ An AI-based Border Surveillance & Tactical Video Analytics Platform designed for
 IP CCTV Cameras (RTSP / ONVIF / MP4)
        │
        ▼
-Python FastAPI AI Backend (Port 8000)
+Python FastAPI AI Backend (Docker GPU Container / Port 8000)
   ├── Security & Auth Guard (JWT Bearer Verification & RBAC Permissions)
   ├── RTSP Stream Capture (OpenCV low-latency buffer & auto-reconnection)
   ├── CameraWorker Threads (Isolated queue & 5 FPS rate limiter per camera)
@@ -45,9 +45,127 @@ IBVAP React Live Surveillance Dashboard (Vite / React 19)
 - **AI Vision**: YOLOv8 (Ultralytics) + ByteTrack + FaceNet (`facenet-pytorch`) + PaddleOCR
 - **Security & Auth**: Supabase Auth (JWT) + Row Level Security (RLS) + Custom RBAC Guards
 - **Database & Storage**: Supabase PostgreSQL + Supabase Private Storage Buckets
+- **Deployment**: Docker + NVIDIA Container Toolkit (CUDA) + Docker Compose
 - **System Monitoring**: `psutil` + `nvidia-smi` / `torch.cuda` hardware monitor
 - **Visualizations**: Recharts + Lucide React + Framer Motion
 - **Audio Engine**: Web Audio API (Synthesized tactical alert sirens)
+
+---
+
+## 🐳 Docker Containerization & GPU Deployment
+
+The IBVAP backend is containerized for production deployment with full NVIDIA Container Toolkit GPU support and automatic CPU fallback.
+
+### A. CPU Development (No GPU Required)
+Run natively or in Docker without dedicated graphics hardware:
+```powershell
+# Run locally with Python
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+PyTorch automatically detects that CUDA is unavailable and falls back cleanly to optimized multi-threaded CPU tensor execution.
+
+### B. NVIDIA GPU Development
+If you have an NVIDIA GPU (e.g. RTX 3050/4090/A100), PyTorch will automatically allocate model weights and inference onto `cuda:0`:
+```powershell
+# Set environment
+$env:CUDA_VISIBLE_DEVICES="0"
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### C. Installing NVIDIA Container Toolkit (For Docker GPU)
+To enable GPU pass-through from the host into Docker:
+1. **Linux / WSL2**:
+   ```bash
+   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+   sudo nvidia-ctk runtime configure --runtime=docker
+   sudo systemctl restart docker
+   ```
+2. **Windows**:
+   Install Docker Desktop with WSL2 backend enabled. NVIDIA drivers on the Windows host pass through CUDA automatically into Docker.
+
+### D. Building the Docker Image
+```powershell
+# Build from project root
+docker compose build
+
+# Or build from backend directory
+cd backend
+docker compose build
+```
+
+### E. Starting the Containers
+```powershell
+# Start detached
+docker compose up -d
+
+# View live container logs
+docker compose logs -f ibvap-backend
+```
+
+### F. Stopping the Containers
+```powershell
+docker compose down
+```
+
+### G. Mounting `best.pt` Model Weights
+Place your trained weights at `backend/models/best.pt`. The Docker Compose file automatically bind-mounts this directory:
+```yaml
+volumes:
+  - ./backend/models:/app/models
+```
+In the container, the weights resolve at `/app/models/best.pt`. You can swap or update weights on the host without rebuilding the container.
+
+### H. Setting Environment Variables
+Copy `.env.example` to `.env`:
+```powershell
+cp backend/.env.example backend/.env
+```
+Ensure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET` are configured.
+
+### I. Checking GPU Detection
+Verify GPU recognition inside the container via the diagnostic endpoint:
+```powershell
+curl http://localhost:8000/api/system/health -H "Authorization: Bearer <TOKEN>"
+```
+Response sample:
+```json
+{
+  "status": "healthy",
+  "gpu": {
+    "gpu_available": true,
+    "gpu_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "gpu_memory_used_mb": 1420,
+    "gpu_memory_total_mb": 6144,
+    "gpu_utilization_percent": 18.5,
+    "gpu_temperature_c": 52
+  }
+}
+```
+
+### J. Checking FastAPI Health (Docker Healthcheck)
+```powershell
+curl http://localhost:8000/api/health
+```
+Returns `{"status": "healthy", "platform": "IBVAP", "version": "1.0.0", ...}`.
+
+### K. Running a Local MP4 Demo Feed
+Set in `backend/.env`:
+```env
+STREAM_SOURCE_MODE=video_file
+TEST_VIDEO_PATH=sample_feed.mp4
+```
+Start the stream via the React Live Surveillance Dashboard or API:
+```powershell
+curl -X POST http://localhost:8000/api/streams/start/BOP-001 -H "Authorization: Bearer <TOKEN>"
+```
 
 ---
 
@@ -66,35 +184,6 @@ IBVAP implements end-to-end defense-in-depth security across the React frontend,
 | **Decommission Cameras / Delete Biometrics** | ✅ | ❌ | ❌ | ❌ |
 | **User Role Management** | ✅ | ❌ | ❌ | ❌ |
 | **View Tamper-Evident Audit Logs** | ✅ | ✅ | ❌ | ❌ |
-
-### Security Measures Implemented
-1. **JWT Verification**: Every FastAPI route validates Bearer tokens, token expiration (`exp`), and user claims via Supabase JWT decoding/verification.
-2. **Database Row-Level Security (RLS)**: PostgreSQL policies on `profiles`, `friendly_persons`, `cameras`, `alerts`, `events`, and `audit_logs` prevent unauthorized access even if client requests bypass UI guards.
-3. **Immutable Audit Trail**: Audit logs are append-only. UPDATE and DELETE policies are permanently revoked on `audit_logs`.
-4. **Credential Isolation**: RTSP passwords and the `SUPABASE_SERVICE_ROLE_KEY` are stripped/masked before sending responses to clients.
-5. **Secure File Uploads**: Image uploads verify file size ($\le 10$ MB), magic byte signatures (JPEG, PNG, WEBP), MIME types, and use randomized server-side UUID filenames.
-6. **Input Sanitization**: Camera IDs and identifiers are strictly validated against regex `^[A-Za-z0-9_-]{3,32}$` to prevent injection attacks and path traversals.
-7. **Security Headers**: Standard defense headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`) are attached to all backend responses.
-
----
-
-## 📊 Analytics & System Health Module
-
-### 1. Analytics Service (`src/services/analytics.ts`)
-Calculates real-time aggregated metrics from Supabase tables across selectable timeframes:
-- **Time Windows**: `Last 1 hour`, `Last 6 hours`, `Last 24 hours`, `Last 7 days`, `Last 30 days`
-- **Calculated Telemetry**:
-  - `getEventStatistics()`: Total events, intrusions, loitering, night movements, stationary behaviors, ANPR plate scans, friendly matches, and unknown persons.
-  - `getAlertStatistics()`: Total alerts, active, resolved, acknowledged, and triage by severity (CRITICAL, WARNING, INFO).
-  - `getDetectionStatistics()`: Optical class breakdown (`person`, `car`, `truck`, `bus`, `motorcycle`) and biometrics ratios.
-  - `getCameraStatistics()`: Stream density rankings, operational status, event load, alert count, and last activity timestamp.
-  - `getHourlyActivity()` / `getDailyActivity()`: Chronological incident and alarm area charts.
-
-### 2. System Health & Performance API
-- **`GET /api/system/health`**:
-  Returns platform status, uptime, host CPU %, memory %, NVIDIA GPU hardware telemetry (device name, VRAM used/total, GPU utilization, temperature), active camera streams count, and average YOLO inference latency.
-- **`GET /api/system/metrics`**:
-  Returns in-memory rolling component latencies (YOLO inference, ByteTrack tracking, Face recognition, ANPR OCR, Event Engine evaluation), frames processed counter, and camera load distribution.
 
 ---
 
@@ -117,7 +206,7 @@ VITE_USE_MOCK_LIVE_DATA=false
 ```env
 HOST=0.0.0.0
 PORT=8000
-ENVIRONMENT=development
+ENVIRONMENT=production
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
 # Supabase Service Integration
@@ -125,43 +214,28 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 
-# AI Model Paths
-YOLO_MODEL_PATH=weights/best.pt
-ANPR_MODEL_PATH=weights/plate_detector.pt
-FACE_MODEL_PATH=weights/facenet.pt
+# AI Model File Paths & Detection Thresholds
+YOLO_MODEL_PATH=/app/models/best.pt
+YOLO_CONFIDENCE=0.40
+
+# License Plate Detection (ANPR) & OCR
+ANPR_MODEL_PATH=
+ANPR_CONFIDENCE=0.40
+OCR_CONFIDENCE=0.50
+
+# Biometric Facial Recognition
+FACE_MODEL_PATH=
 FACE_MATCH_THRESHOLD=0.45
 
-# Tracking Parameters
+# Multi-Object Tracker (ByteTrack)
 TRACKER_TRACK_THRESH=0.40
 TRACKER_TRACK_BUFFER=30
 TRACKER_MATCH_THRESH=0.80
 
-# CCTV Ingestion Rate
-PROCESS_FPS=5.0
+# CCTV Ingestion & Real-Time Processing
+PROCESS_FPS=5
+STREAM_SOURCE_MODE=video_file
 ```
-
----
-
-## 🚀 Running the Platform
-
-### 1. Backend Server
-```powershell
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-- API Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- System Health: [http://localhost:8000/api/system/health](http://localhost:8000/api/system/health)
-- Performance Metrics: [http://localhost:8000/api/system/metrics](http://localhost:8000/api/system/metrics)
-
-### 2. Frontend Dashboard
-```powershell
-npm install
-npm run dev
-```
-Access the tactical dashboard at [http://localhost:5173](http://localhost:5173).
 
 ---
 

@@ -1,0 +1,39 @@
+services:
+  ibvap-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ibvap-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+      - YOLO_MODEL_PATH=/app/models/best.pt
+    volumes:
+      # Mount model directory dynamically
+      - ./backend/models:/app/models
+      # Mount evidence directory for persistent security snapshots
+      - ./backend/evidence:/app/evidence
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
