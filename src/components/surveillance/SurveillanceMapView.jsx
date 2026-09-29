@@ -37,15 +37,15 @@ export default function SurveillanceMapView({
   const [mapLayer, setMapLayer] = useState('TACTICAL'); // 'TACTICAL' | 'RADAR' | 'GRID'
 
   // Map cameras with mock coordinates
-  const mappedCameras = cameras.map((cam, idx) => {
-    const code = cam.cameraCode || cam.id || `BOP-00${idx + 1}`;
+  const mappedCameras = (cameras || []).map((cam, idx) => {
+    const code = cam?.cameraCode || cam?.id || `BOP-00${idx + 1}`;
     const coord = DEFAULT_COORDINATES.find(c => c.id === code) || DEFAULT_COORDINATES[idx % DEFAULT_COORDINATES.length];
     return {
       ...cam,
-      mapX: coord.x,
-      mapY: coord.y,
-      sectorTag: coord.sector,
-      mockLocationLabel: coord.label
+      mapX: coord?.x || (25 + (idx * 20) % 60),
+      mapY: coord?.y || (30 + (idx * 15) % 50),
+      sectorTag: coord?.sector || 'Sector Alpha',
+      mockLocationLabel: coord?.label || cam?.location || 'Watchpost'
     };
   });
 

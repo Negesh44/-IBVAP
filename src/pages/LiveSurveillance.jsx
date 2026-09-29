@@ -41,6 +41,9 @@ export default function LiveSurveillance() {
     setIsSimulating
   } = useSurveillance();
 
+  const safeCameras = Array.isArray(cameras) ? cameras : [];
+  const safeFriendlyPersons = Array.isArray(friendlyPersons) ? friendlyPersons : [];
+
   const [viewMode, setViewMode] = useState('GRID'); // 'GRID' | 'MAP'
   const [layoutMode, setLayoutMode] = useState('2x2'); // '1x1' | '2x2' | '3x2'
   const [detectionFilter, setDetectionFilter] = useState('ALL'); // 'ALL' | 'PEOPLE' | 'VEHICLES' | 'FRIENDLY' | 'UNKNOWN' | 'ALERTS'
@@ -51,9 +54,10 @@ export default function LiveSurveillance() {
   const [showRightPanel, setShowRightPanel] = useState(true);
 
   // Online camera counts
-  const onlineCamerasCount = cameras.filter(c => c.status === 'ONLINE').length;
+  const onlineCamerasCount = safeCameras.filter(c => c?.status === 'ONLINE').length;
 
-  const filteredCameras = cameras.filter(cam => {
+  const filteredCameras = safeCameras.filter(cam => {
+    if (!cam) return false;
     if (sectorFilter === 'ALL') return true;
     return (cam.sector || cam.location || '').toUpperCase().includes(sectorFilter);
   });
@@ -65,7 +69,7 @@ export default function LiveSurveillance() {
   };
 
   const handleSelectCameraFromPanel = (camCode) => {
-    const match = cameras.find(c => (c.cameraCode === camCode || c.id === camCode));
+    const match = safeCameras.find(c => (c.cameraCode === camCode || c.id === camCode));
     if (match) {
       setFullscreenCamera(match);
     }
@@ -272,7 +276,7 @@ export default function LiveSurveillance() {
           {viewMode === 'MAP' ? (
             /* 9. MAP VIEW */
             <SurveillanceMapView
-              cameras={cameras}
+              cameras={safeCameras}
               onSelectCamera={handleSelectCameraFromPanel}
               onFullscreenCamera={(cam) => setFullscreenCamera(cam)}
             />
@@ -303,8 +307,8 @@ export default function LiveSurveillance() {
         {showRightPanel && (
           <div className="lg:col-span-4 xl:col-span-3 sticky top-20">
             <LiveDetectionPanel
-              cameras={cameras}
-              friendlyPersons={friendlyPersons}
+              cameras={safeCameras}
+              friendlyPersons={safeFriendlyPersons}
               activeFilter={detectionFilter}
               onSelectCamera={handleSelectCameraFromPanel}
             />
@@ -342,7 +346,7 @@ export default function LiveSurveillance() {
               <div className="lg:col-span-4 xl:col-span-3 h-[62vh]">
                 <LiveDetectionPanel
                   cameras={[fullscreenCamera]}
-                  friendlyPersons={friendlyPersons}
+                  friendlyPersons={safeFriendlyPersons}
                   activeFilter={detectionFilter}
                   className="h-full"
                 />

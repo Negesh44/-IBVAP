@@ -155,3 +155,18 @@
 .pulse-red-badge {
   animation: pulse-red 1.5s infinite;
 }
+
+@keyframes cctvScan {
+  0% {
+    top: 5%;
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    top: 92%;
+    opacity: 0.2;
+  }
+}
+
