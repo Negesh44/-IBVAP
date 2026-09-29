@@ -60,6 +60,18 @@ class TrackResponse(BaseModel):
     timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
 
 
+class ANPRResponse(BaseModel):
+    """
+    Response schema for POST /api/anpr endpoint.
+    """
+    vehicle_type: Optional[str] = Field(None, description="Type of detected vehicle (car, truck, bus, motorcycle)")
+    vehicle_confidence: float = Field(..., description="Confidence score of vehicle detection")
+    plate_text: Optional[str] = Field(None, description="Extracted license plate string normalized to uppercase alphanumeric")
+    plate_confidence: float = Field(..., description="Confidence score of license plate detection and OCR extraction")
+    plate_bbox: Optional[List[int]] = Field(None, description="Bounding box of the license plate [x1, y1, x2, y2]")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
+
+
 class CameraSchema(BaseModel):
     id: str
     camera_code: Optional[str] = None

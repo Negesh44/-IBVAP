@@ -1,7 +1,7 @@
 # IBVAP — Intelligent Border Video Analytics Platform
-## Python FastAPI AI Backend, YOLO Inference & ByteTrack Tracking Layer
+## Python FastAPI AI Backend, YOLO Inference, ByteTrack Tracking & ANPR Layer
 
-This service provides the AI vision and multi-object tracking layer for IBVAP, exposing REST endpoints for camera telemetry, alert triage, direct YOLO object detection, and ByteTrack-based persistent multi-object tracking, alongside a live WebSocket streaming channel for real-time tracking feeds.
+This service provides the AI vision, multi-object tracking, and Automatic Number Plate Recognition (ANPR) layer for IBVAP, exposing REST endpoints for camera telemetry, alert triage, direct YOLO object detection, ByteTrack-based tracking, and PaddleOCR license plate extraction, alongside a live WebSocket streaming channel for real-time tracking feeds.
 
 ---
 
@@ -10,10 +10,11 @@ This service provides the AI vision and multi-object tracking layer for IBVAP, e
 ```
 backend/
 ├── main.py                     # FastAPI application, CORS, routers & WebSocket /ws/live
-├── requirements.txt            # Python dependencies (FastAPI, Ultralytics, PyTorch, Supabase)
-├── .env                        # Environment configuration, YOLO & ByteTrack hyperparameters
+├── requirements.txt            # Python dependencies (FastAPI, Ultralytics, PyTorch, PaddleOCR, Supabase)
+├── .env                        # Environment configuration, YOLO, ByteTrack & ANPR hyperparameters
 ├── test_detect_api.py          # Standalone test client for /api/detect
 ├── test_tracking_api.py        # Standalone test client for ByteTrack persistence
+├── test_anpr_api.py            # Standalone test client for /api/anpr
 ├── ai/
 │   ├── __init__.py
 │   ├── model_loader.py         # Lazy YOLO model loader with automatic CUDA / CPU allocation
@@ -22,6 +23,11 @@ backend/
 │   ├── __init__.py
 │   ├── bytetrack_tracker.py    # ByteTrack Kalman filter & dual-stage IoU association
 │   └── tracker_service.py      # Multi-camera isolated tracker instances & downstream hooks
+├── anpr/
+│   ├── __init__.py
+│   ├── plate_detector.py       # Modular plate detector (ANPR_MODEL_PATH + vehicle ROI fallback)
+│   ├── ocr_engine.py           # CCTV image preprocessing & PaddleOCR text normalizer
+│   └── anpr_service.py         # End-to-end ANPR pipeline & Supabase event hooks
 ├── services/
 │   ├── __init__.py
 │   ├── inference_service.py    # Coordinates image decoding, detection & latency metrics
@@ -30,6 +36,7 @@ backend/
 │   └── event_service.py        # Threat evaluation & alert dispatch
 ├── api/
 │   ├── __init__.py
+│   ├── anpr.py                 # POST /api/anpr
 │   ├── tracking.py             # POST /api/track & POST /api/track/reset/{camera_id}
 │   ├── detections.py           # POST /api/detect & GET /api/detections
 │   ├── cameras.py              # GET /api/cameras & GET /api/cameras/{id}
@@ -42,29 +49,43 @@ backend/
 
 ---
 
-### Supported Target Classes
+### ANPR Pipeline & Capabilities
 
-The detector and tracker track 5 primary tactical classes:
-
-| Class ID | Target Class | Description |
-|---|---|---|
-| `0` | `person` | Border perimeter humanoid subjects / intruders |
-| `1` | `car` | Light motor vehicles / sedans / SUVs |
-| `2` | `truck` | Heavy transport / cargo / military trucks |
-| `3` | `bus` | Passenger buses / transport carriers |
-| `4` | `motorcycle` | Two-wheelers / motorbikes / ATVs |
+1. **Vehicle Detection**: Uses YOLO to detect vehicle classes (`car`, `truck`, `bus`, `motorcycle`).
+2. **License Plate Detection**:
+   - Modular integration configured via `ANPR_MODEL_PATH` environment variable.
+   - If no dedicated plate model is provided, utilizes heuristic vehicle-relative ROI extraction.
+3. **CCTV Image Preprocessing**:
+   - Grayscale conversion
+   - Resolution upscaling & normalization
+   - Contrast enhancement (CLAHE)
+   - Noise smoothing (Gaussian/Bilateral)
+   - Edge sharpening
+4. **PaddleOCR Text Extraction**:
+   - Extracts character sequences and applies uppercase alphanumeric normalization (`TN09AB1234`).
+5. **Non-Intrusive Error Handling**:
+   - Empty/no-vehicle frames or unreadable plates return empty results gracefully instead of crashing.
+   - Unreadable plates are **not** treated as suspicious automatically.
 
 ---
 
-### ByteTrack Tracking Parameters (`.env`)
+### Configurable Environment Variables (`.env`)
 
-Configure tracking hyperparameters via environment variables:
+```env
+# YOLO Object Detection
+YOLO_MODEL_PATH=weights/best.pt
+YOLO_CONFIDENCE=0.40
 
-| Parameter | Default | Description |
-|---|---|---|
-| `TRACKER_TRACK_THRESH` | `0.40` | Detection confidence threshold for primary track association |
-| `TRACKER_TRACK_BUFFER` | `30` | Number of frames to keep lost tracks before deletion |
-| `TRACKER_MATCH_THRESH` | `0.80` | IoU match threshold for high-confidence association |
+# ByteTrack Multi-Object Tracker
+TRACKER_TRACK_THRESH=0.40
+TRACKER_TRACK_BUFFER=30
+TRACKER_MATCH_THRESH=0.80
+
+# ANPR (Automatic Number Plate Recognition)
+ANPR_MODEL_PATH=
+ANPR_CONFIDENCE=0.40
+OCR_CONFIDENCE=0.50
+```
 
 ---
 
@@ -94,20 +115,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### 4. Configure YOLO & Tracker Settings (`.env`):
-Edit `backend/.env` or export environment variables:
-```bash
-# Set path to your trained .pt weights file:
-export YOLO_MODEL_PATH="weights/best.pt"
-export YOLO_CONFIDENCE=0.40
+> **PaddlePaddle Installation Note:** For CPU-only environments, `pip install paddlepaddle paddleocr` is used. For CUDA GPU accelerated environments, refer to [PaddlePaddle GPU documentation](https://www.paddlepaddle.org.cn/install/quick).
 
-# Tracker settings:
-export TRACKER_TRACK_THRESH=0.40
-export TRACKER_TRACK_BUFFER=30
-export TRACKER_MATCH_THRESH=0.80
-```
-
-#### 5. Start the FastAPI Server:
+#### 4. Start the FastAPI Server:
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -116,67 +126,47 @@ Or directly:
 python main.py
 ```
 
-The server will be available at:
-- **API Base:** `http://localhost:8000`
-- **Interactive Swagger Docs:** `http://localhost:8000/docs`
-- **ReDoc Documentation:** `http://localhost:8000/redoc`
-- **Health Status:** `http://localhost:8000/api/health`
+---
+
+### Available Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Diagnostics, uptime, and connector status |
+| `GET` | `/api/cameras` | List cameras from Supabase |
+| `GET` | `/api/events` | Security and recognition event logs |
+| `GET` | `/api/alerts` | Active and historical perimeter alerts |
+| `POST` | `/api/detect` | Direct YOLO object detection on image frame |
+| `POST` | `/api/track` | YOLO + ByteTrack multi-object tracking |
+| `POST` | `/api/track/reset/{id}` | Reset tracking state for specific camera |
+| `POST` | `/api/anpr` | Vehicle detection + license plate OCR |
+| `WS` | `/ws/live` | Real-time WebSocket streaming bounding boxes |
 
 ---
 
-### Testing the Endpoints
+### Testing the ANPR Endpoint (`POST /api/anpr`)
 
-#### 1. Multi-Object Tracking Endpoint (`POST /api/track`)
-
-**Using `curl`:**
+#### Using `curl`:
 ```bash
-curl -X POST "http://localhost:8000/api/track?camera_id=BOP-001&confidence=0.40" \
+curl -X POST "http://localhost:8000/api/anpr?confidence=0.40" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
-     -F "file=@sample_border_frame.jpg"
+     -F "file=@vehicle_cctv_frame.jpg"
 ```
 
-**Response Format:**
+#### Expected JSON Output:
 ```json
 {
-  "detections": [
-    {
-      "class_id": 0,
-      "object_type": "person",
-      "confidence": 0.94,
-      "bbox": [120, 180, 280, 520]
-    }
-  ],
-  "tracking": [
-    {
-      "track_id": 104,
-      "class_id": 0,
-      "object_type": "person",
-      "confidence": 0.94,
-      "bbox": [120, 180, 280, 520]
-    }
-  ],
-  "inference_time_ms": 16.4,
-  "tracking_time_ms": 1.2,
+  "vehicle_type": "car",
+  "vehicle_confidence": 0.94,
+  "plate_text": "TN09AB1234",
+  "plate_confidence": 0.91,
+  "plate_bbox": [120, 180, 300, 230],
   "timestamp": "2026-09-29T12:00:00.000Z"
 }
 ```
 
-#### 2. Reset Camera Tracking State (`POST /api/track/reset/{camera_id}`)
+#### Running the automated ANPR test client:
 ```bash
-curl -X POST "http://localhost:8000/api/track/reset/BOP-001"
+python test_anpr_api.py
 ```
-
-#### 3. Run Automated Frame-to-Frame Persistence Verification:
-```bash
-python test_tracking_api.py
-```
-
----
-
-### Downstream Pipeline Integration Hooks
-
-The `TrackerService` in [`tracking/tracker_service.py`](./tracking/tracker_service.py) outputs stable `track_id` objects that will feed future analytics modules:
-1. **Virtual Fence / Spatial Tripwire**: Evaluates whether a track ID's trajectory crosses restricted polygon boundaries.
-2. **Loitering Detection**: Calculates dwell time for persistent track IDs in sensitive zones.
-3. **Face Biometrics & ANPR**: Attaches recognized identities/plates to persistent object IDs without needing re-identification on every single frame.
