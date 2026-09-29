@@ -23,6 +23,7 @@ from api.events import router as events_router
 from api.alerts import router as alerts_router
 from api.tracking import router as tracking_router
 from api.anpr import router as anpr_router
+from api.face import router as face_router
 
 # Logging Configuration
 logging.basicConfig(
@@ -96,6 +97,7 @@ app.include_router(events_router)
 app.include_router(alerts_router)
 app.include_router(tracking_router)
 app.include_router(anpr_router)
+app.include_router(face_router)
 
 
 # -------------------------------------------------------------

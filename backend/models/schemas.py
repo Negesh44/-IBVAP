@@ -72,6 +72,78 @@ class ANPRResponse(BaseModel):
     timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
 
 
+class FaceRecognitionResponse(BaseModel):
+    """
+    Response schema for POST /api/face/recognize endpoint.
+    """
+    face_detected: bool = Field(..., description="True if a human face was found in the frame")
+    identity: Optional[str] = Field(None, description="Name of verified Friendly Person, or null if unknown")
+    person_id: Optional[str] = Field(None, description="Unique identifier of matched Friendly Person")
+    friendly: bool = Field(False, description="True if recognized identity is an authorized Friendly Person")
+    match_confidence: float = Field(0.0, description="Biometric match confidence score (0.0 to 1.0)")
+    bbox: Optional[List[int]] = Field(None, description="Bounding box of detected face [x1, y1, x2, y2]")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
+
+
+class FaceRegisterResponse(BaseModel):
+    """
+    Response schema for POST /api/face/register/{person_id} endpoint.
+    """
+    person_id: str
+    name: str
+    face_registered: bool
+    embedding_dimensions: int
+    status: str
+    message: str
+
+
+class SecurityEventItem(BaseModel):
+    """
+    Event item emitted by the IBVAP Event Detection Engine.
+    """
+    event_id: str = Field(..., description="Unique event identifier e.g. EVT-INT-1A2B3C4D")
+    camera_id: str = Field(..., description="Camera identifier, e.g. BOP-001")
+    track_id: int = Field(..., description="ByteTrack tracked object ID")
+    event_type: str = Field(..., description="INTRUSION, LOITERING, NIGHT_MOVEMENT, STATIONARY_PERSON")
+    severity: str = Field(..., description="CRITICAL, WARNING, INFO")
+    confidence: float = Field(..., description="Detection confidence score")
+    description: str = Field(..., description="Descriptive narrative of event")
+    bbox: List[int] = Field(..., min_length=4, max_length=4, description="Bounding box [x1, y1, x2, y2]")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Contextual rule telemetry")
+
+
+class AnalyzeEventsRequest(BaseModel):
+    """
+    Input schema for POST /api/events/analyze.
+    """
+    camera_id: str = Field(..., description="Camera identifier e.g. BOP-001")
+    frame_width: Optional[int] = Field(1920, description="CCTV frame width in pixels")
+    frame_height: Optional[int] = Field(1080, description="CCTV frame height in pixels")
+    brightness: Optional[float] = Field(None, description="Average frame luminance (0-255)")
+    detections: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="Raw YOLO detections")
+    tracks: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="ByteTrack tracked items")
+
+
+class AnalyzeEventsResponse(BaseModel):
+    """
+    Output schema for POST /api/events/analyze.
+    """
+    camera_id: str
+    events_count: int
+    events: List[SecurityEventItem]
+    timestamp: str
+
+
+class VirtualFenceConfig(BaseModel):
+    """
+    Virtual fence polygon configuration for a camera.
+    """
+    camera_id: str = Field(..., description="Target camera identifier")
+    zone: List[List[float]] = Field(..., min_length=3, description="List of [x, y] polygon vertices")
+
+
+
 class CameraSchema(BaseModel):
     id: str
     camera_code: Optional[str] = None
